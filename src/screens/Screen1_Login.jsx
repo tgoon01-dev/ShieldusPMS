@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useStore } from '../store'
+import { loadUserData } from '../lib/supabase'
 
 const BUSINESSES = ['물리보안', '사이버보안', '인프라보안', '경영지원']
 
@@ -8,25 +9,37 @@ export default function Screen1_Login({ onNext }) {
   const [department, setDepartment] = useState('')
   const [email, setEmail] = useState('')
   const [existingData, setExistingData] = useState(false)
+  const [loadingUser, setLoadingUser] = useState(false)
   const { initUser, allData } = useStore()
 
-  const handleEmailBlur = () => {
-    if (email && allData[email]) {
-      const d = allData[email]
-      if (d.profile) {
-        setBusiness(d.profile.business || '')
-        setDepartment(d.profile.department || '')
-        setExistingData(true)
-      }
+  const handleEmailBlur = async () => {
+    if (!email) return
+    // 먼저 로컬캐시 확인
+    if (allData[email]?.profile) {
+      setBusiness(allData[email].profile.business || '')
+      setDepartment(allData[email].profile.department || '')
+      setExistingData(true)
+      return
+    }
+    // Supabase에서 불러오기
+    setLoadingUser(true)
+    const remote = await loadUserData(email)
+    setLoadingUser(false)
+    if (remote?.profile) {
+      setBusiness(remote.profile.business || '')
+      setDepartment(remote.profile.department || '')
+      setExistingData(true)
     } else {
       setExistingData(false)
     }
   }
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!business || !department || !email) return
     const profile = { email: email.trim(), business, department }
-    initUser(email.trim(), profile)
+    // Supabase에서 최신 데이터 불러와서 초기화
+    const remote = await loadUserData(email.trim())
+    initUser(email.trim(), profile, remote)
     onNext()
   }
 
@@ -85,7 +98,10 @@ export default function Screen1_Login({ onNext }) {
             onChange={e => setEmail(e.target.value)}
             onBlur={handleEmailBlur}
           />
-          <div style={styles.hint}>이메일을 기준으로 데이터가 저장됩니다</div>
+          {loadingUser
+            ? <div style={styles.hint}>⏳ 데이터 불러오는 중...</div>
+            : <div style={styles.hint}>이메일을 기준으로 데이터가 저장됩니다</div>
+          }
         </div>
 
         <button
@@ -167,17 +183,6 @@ const styles = {
     fontSize: '15px',
     outline: 'none',
     transition: 'border-color 0.2s',
-  },
-  apiKeyRow: { display: 'flex', gap: '8px', alignItems: 'center' },
-  eyeBtn: {
-    padding: '12px 14px',
-    border: '2px solid #e2e8f0',
-    borderRadius: '10px',
-    background: 'white',
-    cursor: 'pointer',
-    fontSize: '12px',
-    color: '#718096',
-    whiteSpace: 'nowrap',
   },
   hint: { fontSize: '12px', color: '#a0aec0', marginTop: '6px' },
   businessGrid: {
