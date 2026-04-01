@@ -23,7 +23,12 @@ export default function Screen1_Login({ onNext }) {
     }
     // Supabase에서 불러오기
     setLoadingUser(true)
-    const remote = await loadUserData(email)
+    let remote = null
+    try {
+      remote = await loadUserData(email)
+    } catch (e) {
+      console.warn('Supabase 연결 실패:', e)
+    }
     setLoadingUser(false)
     if (remote?.profile) {
       setBusiness(remote.profile.business || '')
@@ -37,8 +42,13 @@ export default function Screen1_Login({ onNext }) {
   const handleStart = async () => {
     if (!business || !department || !email) return
     const profile = { email: email.trim(), business, department }
-    // Supabase에서 최신 데이터 불러와서 초기화
-    const remote = await loadUserData(email.trim())
+    // Supabase에서 최신 데이터 불러와서 초기화 (실패해도 로컬 데이터로 진행)
+    let remote = null
+    try {
+      remote = await loadUserData(email.trim())
+    } catch (e) {
+      console.warn('Supabase 연결 실패, 로컬 데이터로 진행합니다.', e)
+    }
     initUser(email.trim(), profile, remote)
     onNext()
   }
