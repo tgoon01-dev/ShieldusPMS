@@ -1,15 +1,20 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-const getClient = () => new Anthropic({
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-  dangerouslyAllowBrowser: true,
-})
+async function callClaude({ messages, system, max_tokens = 2000, model = 'claude-sonnet-4-6' }) {
+  const body = { messages, max_tokens, model }
+  if (system) body.system = system
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `서버 오류: ${res.status}`)
+  }
+  return res.json()
+}
 
 export async function generateKpiSuggestions(task, business, department) {
-  const client = getClient()
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
+  const response = await callClaude({
     messages: [{
       role: 'user',
       content: `당신은 기업 성과관리 전문가입니다.
@@ -59,7 +64,6 @@ export async function generateKpiSuggestions(task, business, department) {
 }
 
 export async function generateImprovementAdvice(gapItems, business, department, prevAdvices, feedback) {
-  const client = getClient()
   const itemsText = gapItems.map((item, i) =>
     `${i+1}. KPI: "${item.kpi.title}", 목표: ${item.kpi.targetValue}${item.kpi.unit}, 현재: ${item.currentValue}${item.kpi.unit}, 달성률: ${item.achievementRate.toFixed(1)}%`
   ).join('\n')
@@ -77,9 +81,7 @@ export async function generateImprovementAdvice(gapItems, business, department, 
       }).filter(Boolean).join('\n')
     : ''
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1500,
+  const response = await callClaude({
     messages: [{
       role: 'user',
       content: `당신은 ${business} 사업부 ${department} 팀의 성과관리 전문 코치입니다.
@@ -106,7 +108,6 @@ ${itemsText}
 }
 
 export async function chatWithMember(messages, situation, business, department, assigneeName, kpiInfo) {
-  const client = getClient()
   const nameContext = assigneeName ? `이름은 ${assigneeName}입니다. ` : ''
   const kpiContext = kpiInfo
     ? `\n담당 KPI: ${kpiInfo.title} / 목표: ${kpiInfo.targetValue}${kpiInfo.unit} / 현재 달성: ${kpiInfo.currentValue !== null && kpiInfo.currentValue !== undefined ? kpiInfo.currentValue + kpiInfo.unit : '미입력'}`
@@ -123,24 +124,20 @@ export async function chatWithMember(messages, situation, business, department, 
 - 한 번에 2~4문장 이내로 응답하세요
 - 절대로 "저는 AI입니다" 또는 역할극임을 언급하지 마세요`
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 500,
+  const response = await callClaude({
     system: systemPrompt,
-    messages: messages.map(m => ({ role: m.role, content: m.content }))
+    max_tokens: 500,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
   })
   return response.content[0].text
 }
 
 export async function analyzeFeedback(messages, situation, business, department) {
-  const client = getClient()
   const conversationText = messages.map(m =>
     `${m.role === 'user' ? '팀장' : '팀원'}: ${m.content}`
   ).join('\n')
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1500,
+  const response = await callClaude({
     messages: [{
       role: 'user',
       content: `당신은 성과관리 코칭 전문가입니다. 아래 성과 면담 대화를 분석해주세요.
