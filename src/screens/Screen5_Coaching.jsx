@@ -2,6 +2,11 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useStore } from '../store'
 import { chatWithMember, analyzeFeedback } from '../api/claude'
 
+const TRAITS = {
+  positive: ['주도적인', '수용적인', '헌신적인', '치밀한', '유연한', '일관된', '논리적인', '낙천적인', '겸손한', '대담한'],
+  challenging: ['수동적인', '방어적인', '냉소적인', '산만한', '독단적인', '충동적인', '기회주의적인', '위축된', '고지식한', '예민한'],
+}
+
 const SITUATION_TYPES = [
   {
     id: 'goal-setting',
@@ -66,6 +71,7 @@ export default function Screen5_Coaching({ onBack }) {
   const [situationType, setSituationType] = useState(null)
   const [selectedGoalId, setSelectedGoalId] = useState('')
   const [selectedAssignee, setSelectedAssignee] = useState('')
+  const [selectedTraits, setSelectedTraits] = useState([])
   const [situation, setSituation] = useState('')
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -87,8 +93,15 @@ export default function Screen5_Coaching({ onBack }) {
     setSituationType(typeId)
     setSelectedGoalId('')
     setSelectedAssignee('')
+    setSelectedTraits([])
     setSituation('')
     setStep('setup')
+  }
+
+  const toggleTrait = (trait) => {
+    setSelectedTraits(prev =>
+      prev.includes(trait) ? prev.filter(t => t !== trait) : [...prev, trait]
+    )
   }
 
   const canStartChat = selectedAssignee && situation.trim()
@@ -103,6 +116,7 @@ export default function Screen5_Coaching({ onBack }) {
       situation: fullSituation,
       goalTitle: selectedGoal?.kpi?.title || null,
       assigneeName: selectedAssignee,
+      traits: selectedTraits,
       messages: [],
       feedback: null,
     })
@@ -130,7 +144,7 @@ export default function Screen5_Coaching({ onBack }) {
       const fullSituation = `[${selectedSituationType.title}] ${situation}`
       const response = await chatWithMember(
         newMessages, fullSituation, profile.business, profile.department,
-        selectedAssignee, getKpiInfo()
+        selectedAssignee, getKpiInfo(), selectedTraits
       )
       const assistantMsg = { role: 'assistant', content: response }
       const finalMessages = [...newMessages, assistantMsg]
@@ -165,6 +179,7 @@ export default function Screen5_Coaching({ onBack }) {
     setSituationType(null)
     setSelectedGoalId('')
     setSelectedAssignee('')
+    setSelectedTraits([])
     setSituation('')
     setMessages([])
     setInput('')
@@ -260,6 +275,58 @@ export default function Screen5_Coaching({ onBack }) {
               />
             </div>
 
+            {/* 성향 선택 */}
+            <div style={styles.fieldGroup}>
+              <div style={styles.fieldLabel}>
+                구성원 성향 선택 <span style={styles.optional}>(복수 선택 가능)</span>
+                {selectedTraits.length > 0 && (
+                  <span style={{ ...styles.optional, color: selectedSituationType.color, fontWeight: 700 }}>
+                    {' '}· {selectedTraits.length}개 선택됨
+                  </span>
+                )}
+              </div>
+              <div style={styles.traitGroup}>
+                <div style={styles.traitGroupLabel}>✅ 강점 성향</div>
+                <div style={styles.traitRow}>
+                  {TRAITS.positive.map(trait => (
+                    <button
+                      key={trait}
+                      style={{
+                        ...styles.traitChip,
+                        background: selectedTraits.includes(trait) ? '#4299e1' : '#ebf8ff',
+                        color: selectedTraits.includes(trait) ? 'white' : '#2b6cb0',
+                        borderColor: selectedTraits.includes(trait) ? '#4299e1' : '#bee3f8',
+                        fontWeight: selectedTraits.includes(trait) ? 700 : 500,
+                      }}
+                      onClick={() => toggleTrait(trait)}
+                    >
+                      {trait}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ ...styles.traitGroup, marginTop: '10px' }}>
+                <div style={styles.traitGroupLabel}>⚠️ 도전적 성향</div>
+                <div style={styles.traitRow}>
+                  {TRAITS.challenging.map(trait => (
+                    <button
+                      key={trait}
+                      style={{
+                        ...styles.traitChip,
+                        background: selectedTraits.includes(trait) ? '#e53e3e' : '#fff5f5',
+                        color: selectedTraits.includes(trait) ? 'white' : '#c53030',
+                        borderColor: selectedTraits.includes(trait) ? '#e53e3e' : '#feb2b2',
+                        fontWeight: selectedTraits.includes(trait) ? 700 : 500,
+                      }}
+                      onClick={() => toggleTrait(trait)}
+                    >
+                      {trait}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* KPI 선택 (선택사항) */}
             {goals.length > 0 && (
               <div style={styles.fieldGroup}>
@@ -353,7 +420,18 @@ export default function Screen5_Coaching({ onBack }) {
           </div>
 
           <div style={{ ...styles.situationBanner, background: selectedSituationType.bgColor, borderColor: selectedSituationType.color + '40', color: '#2d3748' }}>
-            📋 상황: {situation}
+            <div>📋 상황: {situation}</div>
+            {selectedTraits.length > 0 && (
+              <div style={styles.traitBanner}>
+                🧠 성향: {selectedTraits.map((t, i) => (
+                  <span key={t} style={{
+                    ...styles.traitBannerChip,
+                    background: TRAITS.positive.includes(t) ? '#bee3f8' : '#fed7d7',
+                    color: TRAITS.positive.includes(t) ? '#2b6cb0' : '#c53030',
+                  }}>{t}</span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={styles.chatArea}>
@@ -536,7 +614,13 @@ const styles = {
   chatTitle: { fontSize: '17px', fontWeight: 800 },
   chatSub: { fontSize: '12px', color: '#718096' },
   endBtn: { padding: '10px 16px', background: '#e53e3e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 },
-  situationBanner: { padding: '10px 20px', borderBottom: '1px solid', fontSize: '13px' },
+  situationBanner: { padding: '10px 20px', borderBottom: '1px solid', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' },
+  traitBanner: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
+  traitBannerChip: { padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 },
+  traitGroup: { background: '#f7fafc', borderRadius: '10px', padding: '12px 14px' },
+  traitGroupLabel: { fontSize: '11px', fontWeight: 700, color: '#718096', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' },
+  traitRow: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
+  traitChip: { padding: '6px 12px', border: '1.5px solid', borderRadius: '20px', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s' },
   chatArea: { flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' },
   startGuide: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '12px', padding: '40px 20px' },
   avatarLarge: { width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 900, color: 'white' },
