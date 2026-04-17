@@ -1,4 +1,5 @@
 async function callClaude({ messages, system, max_tokens = 2000, model = 'claude-sonnet-4-6' }) {
+
   const body = { messages, max_tokens, model }
   if (system) body.system = system
   const res = await fetch('/api/claude', {
@@ -11,6 +12,67 @@ async function callClaude({ messages, system, max_tokens = 2000, model = 'claude
     throw new Error(err.error || `서버 오류: ${res.status}`)
   }
   return res.json()
+}
+
+export async function generateCsfSuggestions(task, business, department) {
+  const response = await callClaude({
+    messages: [{
+      role: 'user',
+      content: `당신은 기업 성과관리 전문가입니다.
+아래 업무의 성공을 위한 핵심 성공요인(CSF) 3가지를 서로 다른 관점에서 제안해주세요.
+
+업무: ${task}
+사업부: ${business}
+부서: ${department}
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "csfs": [
+    {
+      "title": "CSF 제목 (10자 이내)",
+      "description": "이 요인이 핵심인 이유 (2문장 이내)",
+      "focus": "관점 키워드 (예: 실행 속도, 품질 완성도, 이해관계자 관리)"
+    }
+  ]
+}`
+    }],
+    max_tokens: 1000,
+  })
+  const text = response.content[0].text.trim()
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  return JSON.parse(jsonMatch[0])
+}
+
+export async function generateKpiFromCsf(task, csf, business, department) {
+  const response = await callClaude({
+    messages: [{
+      role: 'user',
+      content: `당신은 기업 성과관리 전문가입니다.
+아래 업무와 핵심 성공요인을 기반으로 SMART KPI 1개를 제안해주세요.
+
+업무: ${task}
+핵심 성공요인: ${csf.title} (${csf.focus})
+CSF 설명: ${csf.description}
+사업부: ${business}
+부서: ${department}
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "kpi": {
+    "title": "KPI명 (구체적이고 측정 가능하게)",
+    "description": "KPI 상세 설명 (2문장)",
+    "targetValue": "목표 수치",
+    "unit": "단위 (건, %, 점, 회 등)",
+    "period": "기간 (예: 2025년 연간)",
+    "measurement": "측정 방법 (1문장)"
+  }
+}`
+    }],
+    max_tokens: 800,
+  })
+  const text = response.content[0].text.trim()
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  return JSON.parse(jsonMatch[0])
 }
 
 export async function generateKpiSuggestions(task, business, department) {

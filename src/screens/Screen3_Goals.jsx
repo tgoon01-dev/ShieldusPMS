@@ -1,32 +1,34 @@
-import React, { useState, useRef } from 'react'
-import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
+import React, { useState } from 'react'
+import { DndContext, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useStore } from '../store'
-import { generateKpiSuggestions, checkTaskSpecificity } from '../api/claude'
+import { generateCsfSuggestions, generateKpiFromCsf, checkTaskSpecificity } from '../api/claude'
 
-function SortableKpiRow({ goal, index, members, onAssign, onRemoveAssignee, onChangeMonth }) {
+const CSF_ICONS = ['🔑', '⚡', '🎯']
+const CSF_COLORS = [
+  { color: '#4299e1', bg: '#ebf8ff', border: '#bee3f8' },
+  { color: '#48bb78', bg: '#f0fff4', border: '#9ae6b4' },
+  { color: '#9f7aea', bg: '#faf5ff', border: '#d6bcfa' },
+]
+
+function SortableKpiRow({ goal, index, members, onAssign, onRemoveAssignee, onChangeMonth, onEdit }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: goal.id })
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
   const isPending = index >= 10
 
   return (
-    <div ref={setNodeRef} style={{ ...rowStyles.row, ...style, borderLeft: isPending ? '4px solid #e2e8f0' : `4px solid #4299e1` }}>
+    <div ref={setNodeRef} style={{ ...rowStyles.row, ...style, borderLeft: isPending ? '4px solid #e2e8f0' : '4px solid #4299e1' }}>
       <div style={rowStyles.handle} {...attributes} {...listeners}>⠿</div>
       <div style={rowStyles.rank}>
-        {isPending ? <span style={rowStyles.pendingBadge}>보류</span> : <span style={rowStyles.rankNum}>{index + 1}</span>}
+        {isPending
+          ? <span style={rowStyles.pendingBadge}>보류</span>
+          : <span style={rowStyles.rankNum}>{index + 1}</span>}
       </div>
       <div style={rowStyles.content}>
         <div style={rowStyles.kpiTitle}>{goal.kpi.title}</div>
-        <div style={rowStyles.kpiMeta}>
-          목표: {goal.kpi.targetValue}{goal.kpi.unit} · {goal.kpi.measurement}
-        </div>
+        <div style={rowStyles.kpiMeta}>목표: {goal.kpi.targetValue}{goal.kpi.unit} · {goal.kpi.measurement}</div>
       </div>
-      {/* 종료 월 드롭다운 */}
       <select
         style={{
           ...rowStyles.monthSelect,
@@ -42,7 +44,6 @@ function SortableKpiRow({ goal, index, members, onAssign, onRemoveAssignee, onCh
           <option key={m} value={m}>{m}월</option>
         ))}
       </select>
-      {/* 담당자 */}
       <div style={rowStyles.assignees}>
         {(goal.assignees || []).map(name => (
           <div key={name} style={rowStyles.assigneeBadge}>
@@ -50,16 +51,59 @@ function SortableKpiRow({ goal, index, members, onAssign, onRemoveAssignee, onCh
             <button style={rowStyles.removeBtn} onClick={() => onRemoveAssignee(goal.id, name)}>×</button>
           </div>
         ))}
-        <select
-          style={rowStyles.assignSelect}
-          value=""
-          onChange={e => e.target.value && onAssign(goal.id, e.target.value)}
-        >
+        <select style={rowStyles.assignSelect} value="" onChange={e => e.target.value && onAssign(goal.id, e.target.value)}>
           <option value="">+ 담당자</option>
           {members.filter(m => !(goal.assignees || []).includes(m)).map(m => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
+      </div>
+      <button style={rowStyles.editBtn} onClick={() => onEdit(goal)}>수정하기</button>
+    </div>
+  )
+}
+
+function EditModal({ goal, onSave, onClose }) {
+  const [form, setForm] = useState({ ...goal.kpi })
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+
+  return (
+    <div style={modal.overlay}>
+      <div style={modal.box}>
+        <div style={modal.header}>
+          <div style={modal.title}>✏️ KPI 수정</div>
+          <button style={modal.closeBtn} onClick={onClose}>✕</button>
+        </div>
+        <div style={modal.field}>
+          <label style={modal.label}>KPI명</label>
+          <input style={modal.input} value={form.title} onChange={e => set('title', e.target.value)} />
+        </div>
+        <div style={modal.field}>
+          <label style={modal.label}>상세 설명</label>
+          <textarea style={modal.textarea} value={form.description || ''} onChange={e => set('description', e.target.value)} rows={2} />
+        </div>
+        <div style={modal.row}>
+          <div style={{ ...modal.field, flex: 2 }}>
+            <label style={modal.label}>목표값</label>
+            <input style={modal.input} value={form.targetValue} onChange={e => set('targetValue', e.target.value)} />
+          </div>
+          <div style={{ ...modal.field, flex: 1 }}>
+            <label style={modal.label}>단위</label>
+            <input style={modal.input} value={form.unit} onChange={e => set('unit', e.target.value)} />
+          </div>
+        </div>
+        <div style={modal.field}>
+          <label style={modal.label}>기간</label>
+          <input style={modal.input} value={form.period} onChange={e => set('period', e.target.value)} />
+        </div>
+        <div style={modal.field}>
+          <label style={modal.label}>측정 방법</label>
+          <input style={modal.input} value={form.measurement} onChange={e => set('measurement', e.target.value)} />
+        </div>
+        <div style={modal.footer}>
+          <button style={modal.cancelBtn} onClick={onClose}>취소</button>
+          <button style={modal.saveBtn} onClick={() => onSave(goal.id, form)}>저장하기</button>
+        </div>
       </div>
     </div>
   )
@@ -71,19 +115,33 @@ export default function Screen3_Goals({ onBack }) {
   const members = getMembers()
   const profile = getProfile()
 
+  // KPI 생성 단계: null | 'csf' | 'kpi'
+  const [genStep, setGenStep] = useState(null)
   const [taskInput, setTaskInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [suggestions, setSuggestions] = useState(null)
   const [specificity, setSpecificity] = useState(null)
-  const [memberInput, setMemberInput] = useState('')
+  const [error, setError] = useState('')
+
+  // CSF 단계
+  const [csfList, setCsfList] = useState([])
+  const [selectedCsf, setSelectedCsf] = useState(null)
+
+  // KPI 단계
+  const [kpiSuggestion, setKpiSuggestion] = useState(null)
+
+  // 직접 입력
   const [manualForm, setManualForm] = useState(false)
   const [manualKpi, setManualKpi] = useState({ title: '', targetValue: '', unit: '', period: '', measurement: '' })
-  const [error, setError] = useState('')
-  const [activeId, setActiveId] = useState(null)
 
+  // 수정 모달
+  const [editingGoal, setEditingGoal] = useState(null)
+
+  const [memberInput, setMemberInput] = useState('')
+  const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  const handleGenerate = async (force = false) => {
+  // ── Step 1: 업무 입력 → CSF 생성 ──────────────────────────
+  const handleGenerateCsf = async (force = false) => {
     if (!taskInput.trim()) return
     const check = checkTaskSpecificity(taskInput)
     if (!check.isSpecific && !force) {
@@ -94,33 +152,61 @@ export default function Screen3_Goals({ onBack }) {
     setLoading(true)
     setError('')
     try {
-      const result = await generateKpiSuggestions(taskInput, profile.business, profile.department)
-      setSuggestions({ task: taskInput, items: result.suggestions })
+      const result = await generateCsfSuggestions(taskInput, profile.business, profile.department)
+      setCsfList(result.csfs)
+      setSelectedCsf(null)
+      setKpiSuggestion(null)
+      setGenStep('csf')
+    } catch (e) {
+      setError('생성 중 오류가 발생했습니다: ' + e.message)
+    }
+    setLoading(false)
+  }
+
+  // ── Step 2: CSF 선택 → KPI 생성 ───────────────────────────
+  const handleSelectCsf = async (csf) => {
+    setSelectedCsf(csf)
+    setLoading(true)
+    setError('')
+    try {
+      const result = await generateKpiFromCsf(taskInput, csf, profile.business, profile.department)
+      setKpiSuggestion(result.kpi)
+      setGenStep('kpi')
     } catch (e) {
       setError('KPI 생성 중 오류가 발생했습니다: ' + e.message)
     }
     setLoading(false)
   }
 
-  const handleSelectKpi = (suggestion) => {
+  const handleRetryKpi = async () => {
+    if (!selectedCsf) return
+    setLoading(true)
+    setError('')
+    try {
+      const result = await generateKpiFromCsf(taskInput, selectedCsf, profile.business, profile.department)
+      setKpiSuggestion(result.kpi)
+    } catch (e) {
+      setError('KPI 생성 중 오류가 발생했습니다: ' + e.message)
+    }
+    setLoading(false)
+  }
+
+  // ── KPI 보드에 추가 ────────────────────────────────────────
+  const handleAddKpi = () => {
     const newGoal = {
       id: Date.now().toString(),
-      task: suggestions.task,
-      kpi: {
-        title: suggestion.title,
-        description: suggestion.description,
-        targetValue: suggestion.targetValue,
-        unit: suggestion.unit,
-        period: suggestion.period,
-        measurement: suggestion.measurement,
-      },
+      task: taskInput,
+      kpi: { ...kpiSuggestion },
       assignees: [],
       currentValue: null,
-      scores: { strategicImportance: 3, difficulty: 3, contribution: 3 }
+      scores: { strategicImportance: 3, difficulty: 3, contribution: 3 },
     }
     addGoal(newGoal)
-    setSuggestions(null)
+    setGenStep(null)
     setTaskInput('')
+    setCsfList([])
+    setSelectedCsf(null)
+    setKpiSuggestion(null)
   }
 
   const handleAddManual = () => {
@@ -131,17 +217,24 @@ export default function Screen3_Goals({ onBack }) {
       kpi: { ...manualKpi },
       assignees: [],
       currentValue: null,
-      scores: { strategicImportance: 3, difficulty: 3, contribution: 3 }
+      scores: { strategicImportance: 3, difficulty: 3, contribution: 3 },
     }
     addGoal(newGoal)
     setManualForm(false)
     setManualKpi({ title: '', targetValue: '', unit: '', period: '', measurement: '' })
     setTaskInput('')
-    setSuggestions(null)
+    setGenStep(null)
   }
 
-  const handleDragEnd = (event) => {
-    const { active, over } = event
+  // ── 수정 저장 ──────────────────────────────────────────────
+  const handleSaveEdit = (goalId, updatedKpi) => {
+    const updated = goals.map(g => g.id === goalId ? { ...g, kpi: updatedKpi } : g)
+    setGoals(updated)
+    setEditingGoal(null)
+  }
+
+  // ── 드래그 ─────────────────────────────────────────────────
+  const handleDragEnd = ({ active, over }) => {
     setActiveId(null)
     if (active.id !== over?.id) {
       const oldIndex = goals.findIndex(g => g.id === active.id)
@@ -151,31 +244,16 @@ export default function Screen3_Goals({ onBack }) {
   }
 
   const handleAssign = (goalId, name) => {
-    const updated = goals.map(g =>
-      g.id === goalId ? { ...g, assignees: [...(g.assignees || []), name] } : g
-    )
-    setGoals(updated)
+    setGoals(goals.map(g => g.id === goalId ? { ...g, assignees: [...(g.assignees || []), name] } : g))
   }
-
   const handleRemoveAssignee = (goalId, name) => {
-    const updated = goals.map(g =>
-      g.id === goalId ? { ...g, assignees: (g.assignees || []).filter(a => a !== name) } : g
-    )
-    setGoals(updated)
+    setGoals(goals.map(g => g.id === goalId ? { ...g, assignees: (g.assignees || []).filter(a => a !== name) } : g))
   }
-
   const handleChangeMonth = (goalId, month) => {
-    const updated = goals.map(g =>
-      g.id === goalId ? { ...g, deadlineMonth: month } : g
-    )
-    setGoals(updated)
+    setGoals(goals.map(g => g.id === goalId ? { ...g, deadlineMonth: month } : g))
   }
-
   const handleAddMember = () => {
-    if (memberInput.trim()) {
-      addMember(memberInput.trim())
-      setMemberInput('')
-    }
+    if (memberInput.trim()) { addMember(memberInput.trim()); setMemberInput('') }
   }
 
   const pendingCount = Math.max(0, goals.length - 10)
@@ -219,6 +297,7 @@ export default function Screen3_Goals({ onBack }) {
                     onAssign={handleAssign}
                     onRemoveAssignee={handleRemoveAssignee}
                     onChangeMonth={handleChangeMonth}
+                    onEdit={setEditingGoal}
                   />
                 ))}
               </SortableContext>
@@ -226,89 +305,131 @@ export default function Screen3_Goals({ onBack }) {
           </div>
         )}
 
-        {/* Input area */}
+        {/* Input Card */}
         <div style={styles.inputCard}>
           <div style={styles.inputTitle}>KPI 추가를 위한 업무 입력</div>
-          <div style={styles.inputSubtitle}>업무를 풍부하게 설명해주시면 더 구체적인 KPI를 추천받을 수 있습니다.</div>
+          <div style={styles.inputSubtitle}>업무를 구체적으로 설명할수록 더 정확한 KPI를 추천받을 수 있습니다.</div>
 
-          {/* Specificity hint */}
           {specificity && !specificity.isSpecific && (
             <div style={styles.hintBox}>
               <div>💡 {specificity.hint}</div>
               {specificity.example && <div style={{ marginTop: '6px', color: '#718096' }}>예: {specificity.example}</div>}
-              <button style={styles.forceBtn} onClick={() => handleGenerate(true)}>그냥 생성하기</button>
+              <button style={styles.forceBtn} onClick={() => handleGenerateCsf(true)}>그냥 생성하기</button>
             </div>
           )}
 
-          <div style={styles.guideBox}>
-            <div style={styles.guideTitle}>💡 더 좋은 KPI를 받으려면</div>
-            <div style={styles.guideItems}>
-              <span>• 어떤 결과물을 만드는 업무인가요?</span>
-              <span>• 측정 가능한 수치가 있나요?</span>
-              <span>• 언제까지 완료해야 하나요?</span>
-            </div>
-          </div>
-
-          <div style={styles.inputRow}>
-            <textarea
-              style={styles.textarea}
-              placeholder="예: 중소기업 대상 네트워크 보안 취약점 점검 보고서 월 10건 작성"
-              value={taskInput}
-              onChange={e => setTaskInput(e.target.value)}
-              rows={2}
-            />
-          </div>
-
-          {error && <div style={styles.errorBox}>{error}</div>}
-
-          <div style={styles.btnRow}>
-            <button
-              style={{ ...styles.generateBtn, opacity: loading || !taskInput ? 0.5 : 1 }}
-              onClick={() => handleGenerate(false)}
-              disabled={loading || !taskInput}
-            >
-              {loading ? '⏳ KPI 생성 중...' : '✨ KPI 추천 받기'}
-            </button>
-            <button style={styles.manualBtn} onClick={() => setManualForm(!manualForm)}>
-              ✏️ 직접 입력
-            </button>
-          </div>
-
-          {/* Manual form */}
-          {manualForm && (
-            <div style={styles.manualForm}>
-              <input style={styles.manualInput} placeholder="KPI명" value={manualKpi.title} onChange={e => setManualKpi({ ...manualKpi, title: e.target.value })} />
-              <div style={styles.manualRow}>
-                <input style={{ ...styles.manualInput, flex: 2 }} placeholder="목표값 (예: 10)" value={manualKpi.targetValue} onChange={e => setManualKpi({ ...manualKpi, targetValue: e.target.value })} />
-                <input style={{ ...styles.manualInput, flex: 1 }} placeholder="단위 (건, %)" value={manualKpi.unit} onChange={e => setManualKpi({ ...manualKpi, unit: e.target.value })} />
-              </div>
-              <input style={styles.manualInput} placeholder="기간 (예: 2025년 2분기)" value={manualKpi.period} onChange={e => setManualKpi({ ...manualKpi, period: e.target.value })} />
-              <input style={styles.manualInput} placeholder="측정 방법" value={manualKpi.measurement} onChange={e => setManualKpi({ ...manualKpi, measurement: e.target.value })} />
-              <button style={styles.addManualBtn} onClick={handleAddManual}>보드에 추가</button>
-            </div>
-          )}
-
-          {/* Suggestions */}
-          {suggestions && (
-            <div style={styles.suggestionsBox}>
-              <div style={styles.suggestTitle}>💡 "{suggestions.task}" 에 대한 KPI 제안</div>
-              {suggestions.items.map((s, i) => (
-                <div key={i} style={styles.suggestCard}>
-                  <div style={styles.suggestPerspective}>{['①', '②', '③'][i]} {s.perspective}</div>
-                  <div style={styles.suggestKpiTitle}>{s.title}</div>
-                  <div style={styles.suggestDesc}>{s.description}</div>
-                  <div style={styles.suggestMeta}>
-                    <span>🎯 {s.targetValue}{s.unit}</span>
-                    <span>📅 {s.period}</span>
-                    <span>📏 {s.measurement}</span>
-                  </div>
-                  <button style={styles.selectBtn} onClick={() => handleSelectKpi(s)}>이걸로 추가</button>
+          {/* Step 0: 업무 입력 */}
+          {!genStep && (
+            <>
+              <div style={styles.guideBox}>
+                <div style={styles.guideTitle}>💡 더 좋은 KPI를 받으려면</div>
+                <div style={styles.guideItems}>
+                  <span>• 어떤 결과물을 만드는 업무인가요?</span>
+                  <span>• 측정 가능한 수치가 있나요?</span>
+                  <span>• 언제까지 완료해야 하나요?</span>
                 </div>
-              ))}
-              <div style={styles.suggestFooter}>
-                <button style={styles.retryBtn} onClick={() => handleGenerate(true)}>↻ 다른 제안 받기</button>
-                <button style={styles.cancelBtn} onClick={() => setSuggestions(null)}>취소</button>
               </div>
+              <textarea
+                style={styles.textarea}
+                placeholder="예: 중소기업 대상 네트워크 보안 취약점 점검 보고서 월 10건 작성"
+                value={taskInput}
+                onChange={e => setTaskInput(e.target.value)}
+                rows={2}
+              />
+              {error && <div style={styles.errorBox}>{error}</div>}
+              <div style={styles.btnRow}>
+                <button
+                  style={{ ...styles.generateBtn, opacity: loading || !taskInput ? 0.5 : 1 }}
+                  onClick={() => handleGenerateCsf(false)}
+                  disabled={loading || !taskInput}
+                >
+                  {loading ? '⏳ 분석 중...' : '✨ KPI 추천 받기'}
+                </button>
+                <button style={styles.manualBtn} onClick={() => setManualForm(!manualForm)}>
+                  ✏️ 직접 입력
+                </button>
+              </div>
+              {manualForm && (
+                <div style={styles.manualForm}>
+                  <input style={styles.manualInput} placeholder="KPI명" value={manualKpi.title} onChange={e => setManualKpi({ ...manualKpi, title: e.target.value })} />
+                  <div style={styles.manualRow}>
+                    <input style={{ ...styles.manualInput, flex: 2 }} placeholder="목표값" value={manualKpi.targetValue} onChange={e => setManualKpi({ ...manualKpi, targetValue: e.target.value })} />
+                    <input style={{ ...styles.manualInput, flex: 1 }} placeholder="단위" value={manualKpi.unit} onChange={e => setManualKpi({ ...manualKpi, unit: e.target.value })} />
+                  </div>
+                  <input style={styles.manualInput} placeholder="기간 (예: 2025년 2분기)" value={manualKpi.period} onChange={e => setManualKpi({ ...manualKpi, period: e.target.value })} />
+                  <input style={styles.manualInput} placeholder="측정 방법" value={manualKpi.measurement} onChange={e => setManualKpi({ ...manualKpi, measurement: e.target.value })} />
+                  <button style={styles.addManualBtn} onClick={handleAddManual}>보드에 추가</button>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Step 1: CSF 선택 */}
+          {genStep === 'csf' && (
+            <div style={styles.stepBox}>
+              <div style={styles.stepHeader}>
+                <div style={styles.stepBadge}>STEP 1</div>
+                <div style={styles.stepTitle}>핵심 성공요인(CSF) 선택</div>
+                <button style={styles.stepBackBtn} onClick={() => setGenStep(null)}>← 업무 재입력</button>
+              </div>
+              <div style={styles.taskChip}>"{taskInput}"</div>
+              <div style={styles.stepDesc}>이 업무의 성공을 위해 가장 중요한 요인을 선택하세요. 선택한 요인을 기반으로 KPI가 정밀하게 설계됩니다.</div>
+              {loading ? (
+                <div style={styles.loadingBox}>⏳ 핵심 성공요인 분석 중...</div>
+              ) : (
+                <div style={styles.csfGrid}>
+                  {csfList.map((csf, i) => (
+                    <button
+                      key={i}
+                      style={{ ...styles.csfCard, borderColor: CSF_COLORS[i].border }}
+                      onClick={() => handleSelectCsf(csf)}
+                    >
+                      <div style={{ ...styles.csfIcon, background: CSF_COLORS[i].bg, color: CSF_COLORS[i].color }}>
+                        {CSF_ICONS[i]}
+                      </div>
+                      <div style={{ ...styles.csfFocus, color: CSF_COLORS[i].color }}>{csf.focus}</div>
+                      <div style={styles.csfTitle}>{csf.title}</div>
+                      <div style={styles.csfDesc}>{csf.description}</div>
+                      <div style={{ ...styles.csfSelectBtn, background: CSF_COLORS[i].color }}>
+                        이 요인으로 KPI 생성 →
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {error && <div style={styles.errorBox}>{error}</div>}
+            </div>
+          )}
+
+          {/* Step 2: KPI 미리보기 */}
+          {genStep === 'kpi' && (
+            <div style={styles.stepBox}>
+              <div style={styles.stepHeader}>
+                <div style={{ ...styles.stepBadge, background: '#48bb78' }}>STEP 2</div>
+                <div style={styles.stepTitle}>KPI 확인 및 추가</div>
+                <button style={styles.stepBackBtn} onClick={() => setGenStep('csf')}>← CSF 다시 선택</button>
+              </div>
+              <div style={styles.csfSelectedBadge}>
+                핵심 성공요인: <strong>{selectedCsf?.title}</strong> ({selectedCsf?.focus})
+              </div>
+              {loading ? (
+                <div style={styles.loadingBox}>⏳ SMART KPI 설계 중...</div>
+              ) : kpiSuggestion && (
+                <div style={styles.kpiPreviewCard}>
+                  <div style={styles.kpiPreviewTitle}>{kpiSuggestion.title}</div>
+                  <div style={styles.kpiPreviewDesc}>{kpiSuggestion.description}</div>
+                  <div style={styles.kpiPreviewMeta}>
+                    <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>목표</span>{kpiSuggestion.targetValue}{kpiSuggestion.unit}</div>
+                    <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>기간</span>{kpiSuggestion.period}</div>
+                    <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>측정</span>{kpiSuggestion.measurement}</div>
+                  </div>
+                  <div style={styles.kpiPreviewFooter}>
+                    <button style={styles.retryKpiBtn} onClick={handleRetryKpi}>↻ 다시 생성</button>
+                    <button style={styles.addKpiBtn} onClick={handleAddKpi}>✅ 보드에 추가</button>
+                  </div>
+                </div>
+              )}
+              {error && <div style={styles.errorBox}>{error}</div>}
             </div>
           )}
         </div>
@@ -327,35 +448,31 @@ export default function Screen3_Goals({ onBack }) {
             <button style={styles.addMemberBtn} onClick={handleAddMember}>추가</button>
           </div>
           <div style={styles.memberList}>
-            {members.map(m => (
-              <div key={m} style={styles.memberChip}>{m}</div>
-            ))}
+            {members.map(m => <div key={m} style={styles.memberChip}>{m}</div>)}
           </div>
         </div>
 
-        {/* Confirm */}
         {goals.length > 0 && (
           <button style={styles.confirmBtn} onClick={onBack}>
             ✅ 목표 확정 ({goals.length}개) → 메인으로
           </button>
         )}
       </div>
+
+      {/* 수정 모달 */}
+      {editingGoal && (
+        <EditModal
+          goal={editingGoal}
+          onSave={handleSaveEdit}
+          onClose={() => setEditingGoal(null)}
+        />
+      )}
     </div>
   )
 }
 
 const rowStyles = {
-  row: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px 16px',
-    borderBottom: '1px solid #f7fafc',
-    gap: '12px',
-    background: 'white',
-    borderRadius: '8px',
-    marginBottom: '6px',
-    cursor: 'default',
-  },
+  row: { display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f7fafc', gap: '12px', background: 'white', borderRadius: '8px', marginBottom: '6px', cursor: 'default' },
   handle: { cursor: 'grab', color: '#cbd5e0', fontSize: '20px', lineHeight: 1, userSelect: 'none' },
   rank: { width: '36px', textAlign: 'center', flexShrink: 0 },
   rankNum: { width: '28px', height: '28px', background: '#4299e1', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, margin: '0 auto' },
@@ -368,6 +485,23 @@ const rowStyles = {
   assigneeBadge: { background: '#ebf8ff', color: '#2b6cb0', borderRadius: '20px', padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' },
   removeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#a0aec0', fontSize: '14px', lineHeight: 1, padding: '0 2px' },
   assignSelect: { padding: '4px 8px', border: '1px dashed #bee3f8', borderRadius: '20px', fontSize: '12px', color: '#4299e1', background: 'white', cursor: 'pointer' },
+  editBtn: { padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '12px', color: '#4a5568', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' },
+}
+
+const modal = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' },
+  box: { background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '520px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
+  title: { fontSize: '18px', fontWeight: 800, color: '#1a202c' },
+  closeBtn: { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#718096', padding: '4px' },
+  field: { marginBottom: '16px' },
+  label: { display: 'block', fontSize: '12px', fontWeight: 700, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' },
+  input: { width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' },
+  textarea: { width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', outline: 'none', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' },
+  row: { display: 'flex', gap: '10px' },
+  footer: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '24px' },
+  cancelBtn: { padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '14px', color: '#718096' },
+  saveBtn: { padding: '10px 24px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 },
 }
 
 const styles = {
@@ -375,7 +509,7 @@ const styles = {
   container: { maxWidth: '900px', margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', background: 'white', padding: '20px 24px', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
   backBtn: { padding: '8px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '13px', color: '#718096' },
-  title: { fontSize: '22px', fontWeight: 800, color: '#1a202c' },
+  title: { fontSize: '22px', fontWeight: 800, color: '#1a202c', margin: 0 },
   sub: { fontSize: '13px', color: '#718096', marginTop: '2px' },
   statsBox: { display: 'flex', gap: '8px', fontSize: '14px', color: '#4a5568', fontWeight: 600 },
   boardCard: { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
@@ -390,8 +524,7 @@ const styles = {
   guideBox: { background: '#f7fafc', borderRadius: '10px', padding: '12px 16px', marginBottom: '14px' },
   guideTitle: { fontSize: '12px', fontWeight: 700, color: '#4a5568', marginBottom: '8px' },
   guideItems: { display: 'flex', gap: '16px', fontSize: '12px', color: '#718096', flexWrap: 'wrap' },
-  inputRow: { marginBottom: '12px' },
-  textarea: { width: '100%', padding: '12px 14px', border: '2px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', resize: 'vertical', outline: 'none', fontFamily: 'inherit' },
+  textarea: { width: '100%', padding: '12px 14px', border: '2px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', marginBottom: '12px', boxSizing: 'border-box' },
   errorBox: { background: '#fff5f5', border: '1px solid #feb2b2', borderRadius: '8px', padding: '10px', color: '#c53030', fontSize: '13px', marginBottom: '10px' },
   btnRow: { display: 'flex', gap: '10px' },
   generateBtn: { flex: 1, padding: '12px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 },
@@ -400,17 +533,38 @@ const styles = {
   manualInput: { padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', outline: 'none' },
   manualRow: { display: 'flex', gap: '8px' },
   addManualBtn: { padding: '10px', background: '#2d3748', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 },
-  suggestionsBox: { marginTop: '20px', borderTop: '2px solid #e2e8f0', paddingTop: '16px' },
-  suggestTitle: { fontSize: '14px', fontWeight: 700, color: '#4a5568', marginBottom: '14px' },
-  suggestCard: { border: '2px solid #e2e8f0', borderRadius: '12px', padding: '16px', marginBottom: '10px', position: 'relative' },
-  suggestPerspective: { fontSize: '11px', fontWeight: 700, color: '#4299e1', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' },
-  suggestKpiTitle: { fontSize: '16px', fontWeight: 800, color: '#1a202c', marginBottom: '6px' },
-  suggestDesc: { fontSize: '13px', color: '#718096', marginBottom: '10px', lineHeight: 1.5 },
-  suggestMeta: { display: 'flex', gap: '14px', fontSize: '12px', color: '#4a5568', marginBottom: '12px', flexWrap: 'wrap' },
-  selectBtn: { padding: '8px 20px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 },
-  suggestFooter: { display: 'flex', gap: '10px', marginTop: '6px' },
-  retryBtn: { padding: '10px 20px', background: '#ebf8ff', color: '#2b6cb0', border: '2px solid #bee3f8', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 },
-  cancelBtn: { padding: '10px 16px', background: 'white', color: '#a0aec0', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' },
+
+  // Step boxes
+  stepBox: { marginTop: '16px', borderTop: '2px solid #e2e8f0', paddingTop: '20px' },
+  stepHeader: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' },
+  stepBadge: { background: '#4299e1', color: 'white', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px' },
+  stepTitle: { fontSize: '16px', fontWeight: 800, color: '#2d3748', flex: 1 },
+  stepBackBtn: { padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '12px', color: '#718096' },
+  taskChip: { display: 'inline-block', background: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', color: '#4a5568', marginBottom: '12px' },
+  stepDesc: { fontSize: '13px', color: '#718096', marginBottom: '20px', lineHeight: 1.6 },
+  loadingBox: { background: '#f7fafc', borderRadius: '10px', padding: '20px', textAlign: 'center', color: '#718096', fontSize: '14px' },
+
+  // CSF cards
+  csfGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
+  csfCard: { background: 'white', border: '2px solid', borderRadius: '14px', padding: '20px 16px', textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '8px', transition: 'transform 0.15s', },
+  csfIcon: { width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' },
+  csfFocus: { fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  csfTitle: { fontSize: '15px', fontWeight: 800, color: '#1a202c' },
+  csfDesc: { fontSize: '12px', color: '#718096', lineHeight: 1.6, flex: 1 },
+  csfSelectBtn: { color: 'white', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, textAlign: 'center', marginTop: '4px' },
+
+  // KPI Preview
+  csfSelectedBadge: { background: '#f0fff4', border: '1px solid #9ae6b4', borderRadius: '8px', padding: '8px 14px', fontSize: '13px', color: '#276749', marginBottom: '16px' },
+  kpiPreviewCard: { border: '2px solid #4299e1', borderRadius: '14px', padding: '22px', background: '#f7fbff' },
+  kpiPreviewTitle: { fontSize: '18px', fontWeight: 800, color: '#1a202c', marginBottom: '8px' },
+  kpiPreviewDesc: { fontSize: '13px', color: '#4a5568', lineHeight: 1.6, marginBottom: '16px' },
+  kpiPreviewMeta: { display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' },
+  kpiMetaItem: { display: 'flex', gap: '10px', fontSize: '13px', color: '#2d3748' },
+  kpiMetaLabel: { fontWeight: 700, color: '#718096', width: '40px', fontSize: '12px', textTransform: 'uppercase', flexShrink: 0 },
+  kpiPreviewFooter: { display: 'flex', gap: '10px', justifyContent: 'flex-end' },
+  retryKpiBtn: { padding: '10px 18px', background: '#ebf8ff', color: '#2b6cb0', border: '2px solid #bee3f8', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 },
+  addKpiBtn: { padding: '10px 24px', background: '#38a169', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 },
+
   memberCard: { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
   memberTitle: { fontWeight: 700, color: '#2d3748', marginBottom: '12px' },
   memberInputRow: { display: 'flex', gap: '8px', marginBottom: '12px' },
