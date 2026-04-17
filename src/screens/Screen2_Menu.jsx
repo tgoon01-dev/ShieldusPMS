@@ -34,13 +34,128 @@ const MENU_ITEMS = [
   },
 ]
 
+function getAchievementRate(goal) {
+  const val = goal.currentValue !== null && goal.currentValue !== undefined
+    ? Number(goal.currentValue)
+    : null
+  const target = Number(goal.targetValue)
+  if (val === null || isNaN(val) || isNaN(target) || target === 0) return null
+  return Math.min(Math.round((val / target) * 100), 200)
+}
+
+function rateColor(rate) {
+  if (rate === null) return '#cbd5e0'
+  if (rate >= 80) return '#48bb78'
+  if (rate >= 50) return '#ed8936'
+  return '#fc8181'
+}
+
+function rateBg(rate) {
+  if (rate === null) return '#edf2f7'
+  if (rate >= 80) return '#f0fff4'
+  if (rate >= 50) return '#fffaf0'
+  return '#fff5f5'
+}
+
+function KpiDashboard({ goals, onGoToGoals }) {
+  if (goals.length === 0) {
+    return (
+      <div style={db.emptyCard}>
+        <div style={db.emptyIcon}>📋</div>
+        <div style={db.emptyTitle}>설정된 KPI가 없습니다</div>
+        <div style={db.emptyDesc}>목표를 설정해 주십시오.</div>
+        <button style={db.emptyBtn} onClick={onGoToGoals}>목표 설정하러 가기 →</button>
+      </div>
+    )
+  }
+
+  const rates = goals.map(g => getAchievementRate(g))
+  const withData = rates.filter(r => r !== null)
+  const avgRate = withData.length > 0
+    ? Math.round(withData.reduce((a, b) => a + b, 0) / withData.length)
+    : null
+
+  return (
+    <div style={db.card}>
+      <div style={db.topRow}>
+        <div style={db.cardTitle}>KPI 달성 현황</div>
+        <div style={db.summary}>
+          <div style={db.summaryItem}>
+            <span style={db.summaryNum}>{goals.length}</span>
+            <span style={db.summaryLabel}>전체 KPI</span>
+          </div>
+          <div style={db.divider} />
+          <div style={db.summaryItem}>
+            <span style={db.summaryNum}>{withData.length}</span>
+            <span style={db.summaryLabel}>측정 완료</span>
+          </div>
+          <div style={db.divider} />
+          <div style={{ ...db.summaryItem }}>
+            <span style={{ ...db.summaryNum, color: avgRate !== null ? rateColor(avgRate) : '#a0aec0' }}>
+              {avgRate !== null ? `${avgRate}%` : '-'}
+            </span>
+            <span style={db.summaryLabel}>평균 달성률</span>
+          </div>
+        </div>
+      </div>
+
+      {avgRate !== null && (
+        <div style={db.overallBarWrap}>
+          <div style={db.overallBarTrack}>
+            <div style={{
+              ...db.overallBarFill,
+              width: `${Math.min(avgRate, 100)}%`,
+              background: rateColor(avgRate),
+            }} />
+            <div style={{ ...db.overallBarLabel, color: rateColor(avgRate) }}>{avgRate}%</div>
+          </div>
+          <div style={db.overallBarCaption}>전체 평균 달성률</div>
+        </div>
+      )}
+
+      <div style={db.kpiList}>
+        {goals.map(goal => {
+          const rate = getAchievementRate(goal)
+          const color = rateColor(rate)
+          const bg = rateBg(rate)
+          return (
+            <div key={goal.id} style={{ ...db.kpiRow, background: bg }}>
+              <div style={db.kpiLeft}>
+                <div style={db.kpiPerspective}>{goal.perspective || ''}</div>
+                <div style={db.kpiTitle}>{goal.title}</div>
+                <div style={db.kpiValues}>
+                  {rate !== null
+                    ? <span>{goal.currentValue}{goal.unit} <span style={db.slash}>/</span> 목표 {goal.targetValue}{goal.unit}</span>
+                    : <span style={db.noData}>달성 현황 미입력</span>
+                  }
+                </div>
+              </div>
+              <div style={db.kpiRight}>
+                <div style={{ ...db.rateBadge, color, borderColor: color + '60', background: 'white' }}>
+                  {rate !== null ? `${rate}%` : '-'}
+                </div>
+                <div style={db.barTrack}>
+                  <div style={{
+                    ...db.barFill,
+                    width: rate !== null ? `${Math.min(rate, 100)}%` : '0%',
+                    background: color,
+                  }} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Screen2_Menu({ onSelect, onLogout }) {
   const getProfile = useStore(s => s.getProfile)
   const getGoals = useStore(s => s.getGoals)
   const profile = getProfile()
   const goals = getGoals()
   const hasGoals = goals.length > 0
-  const hasCurrentValues = goals.some(g => g.currentValue !== null && g.currentValue !== undefined)
 
   const isEnabled = (item) => {
     if (item.always) return true
@@ -59,22 +174,9 @@ export default function Screen2_Menu({ onSelect, onLogout }) {
           <button style={styles.logoutBtn} onClick={onLogout}>로그아웃</button>
         </div>
 
-        <div style={styles.progress}>
-          <div style={styles.progressTitle}>진행 현황</div>
-          <div style={styles.progressRow}>
-            <div style={styles.progressItem}>
-              <div style={{ ...styles.progressDot, background: hasGoals ? '#48bb78' : '#e2e8f0' }} />
-              <span>KPI {goals.length}개 설정됨</span>
-            </div>
-            <div style={styles.progressItem}>
-              <div style={{ ...styles.progressDot, background: hasCurrentValues ? '#48bb78' : '#e2e8f0' }} />
-              <span>중간 관리 {hasCurrentValues ? '입력 완료' : '미완료'}</span>
-            </div>
-          </div>
-        </div>
+        <KpiDashboard goals={goals} onGoToGoals={() => onSelect('goals')} />
 
-        <div style={styles.title}>어떤 기능을 사용하시겠어요?</div>
-
+        <div style={styles.sectionTitle}>기능 선택</div>
         <div style={styles.grid}>
           {MENU_ITEMS.map(item => {
             const enabled = isEnabled(item)
@@ -97,9 +199,7 @@ export default function Screen2_Menu({ onSelect, onLogout }) {
                 <div style={styles.menuTitle}>{item.title}</div>
                 <div style={styles.menuDesc}>{item.desc}</div>
                 {!enabled && (
-                  <div style={styles.lockBadge}>
-                    {item.id === 'mid-review' ? '목표 설정 후 활성화' : '중간 관리 후 활성화'}
-                  </div>
+                  <div style={styles.lockBadge}>목표 설정 후 활성화</div>
                 )}
               </button>
             )
@@ -108,6 +208,99 @@ export default function Screen2_Menu({ onSelect, onLogout }) {
       </div>
     </div>
   )
+}
+
+const db = {
+  card: {
+    background: 'white',
+    borderRadius: '16px',
+    padding: '20px 24px',
+    marginBottom: '20px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+  },
+  emptyCard: {
+    background: '#f7fafc',
+    border: '2px dashed #e2e8f0',
+    borderRadius: '16px',
+    padding: '36px 24px',
+    marginBottom: '20px',
+    textAlign: 'center',
+  },
+  emptyIcon: { fontSize: '36px', marginBottom: '12px' },
+  emptyTitle: { fontSize: '16px', fontWeight: 700, color: '#a0aec0', marginBottom: '6px' },
+  emptyDesc: { fontSize: '13px', color: '#cbd5e0', marginBottom: '16px' },
+  emptyBtn: {
+    padding: '8px 20px',
+    background: '#4299e1',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  topRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '14px',
+  },
+  cardTitle: { fontSize: '14px', fontWeight: 700, color: '#2d3748' },
+  summary: { display: 'flex', alignItems: 'center', gap: '12px' },
+  summaryItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' },
+  summaryNum: { fontSize: '18px', fontWeight: 800, color: '#2d3748' },
+  summaryLabel: { fontSize: '10px', color: '#a0aec0', fontWeight: 600 },
+  divider: { width: '1px', height: '28px', background: '#e2e8f0' },
+  overallBarWrap: { marginBottom: '14px' },
+  overallBarTrack: {
+    position: 'relative',
+    height: '10px',
+    background: '#edf2f7',
+    borderRadius: '999px',
+    overflow: 'hidden',
+    marginBottom: '4px',
+  },
+  overallBarFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    height: '100%',
+    borderRadius: '999px',
+    transition: 'width 0.5s ease',
+  },
+  overallBarLabel: {
+    position: 'absolute',
+    right: '8px',
+    top: '-1px',
+    fontSize: '9px',
+    fontWeight: 700,
+    lineHeight: '12px',
+  },
+  overallBarCaption: { fontSize: '11px', color: '#a0aec0', textAlign: 'right' },
+  kpiList: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  kpiRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 14px',
+    borderRadius: '10px',
+  },
+  kpiLeft: { flex: 1, minWidth: 0 },
+  kpiPerspective: { fontSize: '10px', color: '#a0aec0', fontWeight: 600, marginBottom: '2px' },
+  kpiTitle: { fontSize: '13px', fontWeight: 700, color: '#2d3748', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  kpiValues: { fontSize: '11px', color: '#718096' },
+  slash: { color: '#cbd5e0' },
+  noData: { color: '#cbd5e0', fontStyle: 'italic' },
+  kpiRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', marginLeft: '16px', minWidth: '80px' },
+  rateBadge: {
+    fontSize: '13px',
+    fontWeight: 800,
+    border: '1px solid',
+    borderRadius: '6px',
+    padding: '2px 8px',
+  },
+  barTrack: { width: '80px', height: '6px', background: '#edf2f7', borderRadius: '999px', overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: '999px', transition: 'width 0.4s ease' },
 }
 
 const styles = {
@@ -124,16 +317,16 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '24px',
+    marginBottom: '20px',
     background: 'white',
-    padding: '20px 24px',
+    padding: '18px 24px',
     borderRadius: '16px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
   },
   greeting: { fontSize: '20px', fontWeight: 700, color: '#1a202c' },
   sub: { fontSize: '13px', color: '#718096', marginTop: '4px' },
   logoutBtn: {
-    padding: '8px 16px',
+    padding: '7px 14px',
     border: '1px solid #e2e8f0',
     borderRadius: '8px',
     background: 'white',
@@ -141,59 +334,50 @@ const styles = {
     fontSize: '13px',
     color: '#718096',
   },
-  progress: {
-    background: 'white',
-    padding: '16px 24px',
-    borderRadius: '12px',
-    marginBottom: '24px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-  },
-  progressTitle: { fontSize: '12px', fontWeight: 700, color: '#a0aec0', marginBottom: '10px', textTransform: 'uppercase' },
-  progressRow: { display: 'flex', gap: '24px' },
-  progressItem: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#4a5568' },
-  progressDot: { width: '10px', height: '10px', borderRadius: '50%' },
-  title: {
-    fontSize: '22px',
-    fontWeight: 800,
-    color: '#1a202c',
-    marginBottom: '16px',
+  sectionTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#a0aec0',
+    marginBottom: '10px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
   },
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '16px',
+    gap: '12px',
   },
   menuCard: {
     background: 'white',
     border: '2px solid',
-    borderRadius: '16px',
-    padding: '28px 24px',
+    borderRadius: '14px',
+    padding: '18px 16px',
     textAlign: 'left',
     transition: 'all 0.2s',
     position: 'relative',
   },
   menuIcon: {
-    width: '52px',
-    height: '52px',
-    borderRadius: '14px',
+    width: '40px',
+    height: '40px',
+    borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '26px',
-    marginBottom: '16px',
+    fontSize: '20px',
+    marginBottom: '10px',
   },
-  menuNum: { fontSize: '11px', fontWeight: 700, color: '#a0aec0', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' },
-  menuTitle: { fontSize: '18px', fontWeight: 800, color: '#1a202c', marginBottom: '8px' },
-  menuDesc: { fontSize: '13px', color: '#718096', lineHeight: 1.5 },
+  menuNum: { fontSize: '10px', fontWeight: 700, color: '#a0aec0', marginBottom: '3px', letterSpacing: '1px' },
+  menuTitle: { fontSize: '15px', fontWeight: 800, color: '#1a202c', marginBottom: '5px' },
+  menuDesc: { fontSize: '12px', color: '#718096', lineHeight: 1.4 },
   lockBadge: {
     position: 'absolute',
-    bottom: '16px',
-    right: '16px',
+    bottom: '12px',
+    right: '12px',
     background: '#f7fafc',
     border: '1px solid #e2e8f0',
     borderRadius: '20px',
-    padding: '4px 10px',
-    fontSize: '11px',
+    padding: '3px 8px',
+    fontSize: '10px',
     color: '#a0aec0',
   },
 }
