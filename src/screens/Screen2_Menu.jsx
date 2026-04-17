@@ -14,7 +14,7 @@ const MENU_ITEMS = [
   },
   {
     id: 'mid-review',
-    num: '2-1',
+    num: '2',
     title: '중간 관리',
     desc: '달성 현황 입력 및 Gap 분석',
     icon: '📊',
@@ -24,23 +24,13 @@ const MENU_ITEMS = [
   },
   {
     id: 'coaching',
-    num: '2-2',
+    num: '3',
     title: '코칭/피드백 시뮬레이션',
     desc: '성과 면담 AI 롤플레이 연습',
     icon: '💬',
     color: '#ed8936',
     bgColor: '#fffaf0',
     always: true,
-  },
-  {
-    id: 'evaluation',
-    num: '3',
-    title: '성과 평가',
-    desc: '전략적 중요도·난이도·기여도 기반 평가',
-    icon: '⭐',
-    color: '#9f7aea',
-    bgColor: '#faf5ff',
-    always: false,
   },
 ]
 
@@ -55,7 +45,6 @@ export default function Screen2_Menu({ onSelect, onLogout }) {
   const isEnabled = (item) => {
     if (item.always) return true
     if (item.id === 'mid-review') return hasGoals
-    if (item.id === 'evaluation') return hasCurrentValues
     return true
   }
 
@@ -79,7 +68,7 @@ export default function Screen2_Menu({ onSelect, onLogout }) {
             </div>
             <div style={styles.progressItem}>
               <div style={{ ...styles.progressDot, background: hasCurrentValues ? '#48bb78' : '#e2e8f0' }} />
-              <span>중간 관리 {hasCurrentValues ? '완료' : '미완료'}</span>
+              <span>중간 관리 {hasCurrentValues ? '입력 완료' : '미완료'}</span>
             </div>
           </div>
         </div>
@@ -171,7 +160,7 @@ const styles = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
+    gridTemplateColumns: 'repeat(3, 1fr)',
     gap: '16px',
   },
   menuCard: {

@@ -5,8 +5,6 @@ import Screen2_Menu from './screens/Screen2_Menu'
 import Screen3_Goals from './screens/Screen3_Goals'
 import Screen4_MidReview from './screens/Screen4_MidReview'
 import Screen5_Coaching from './screens/Screen5_Coaching'
-import Screen6_Evaluation from './screens/Screen6_Evaluation'
-
 export default function App() {
   const [screen, setScreen] = React.useState('login')
   const currentEmail = useStore(s => s.currentEmail)
@@ -27,9 +25,6 @@ export default function App() {
   }
   if (screen === 'coaching') {
     return <Screen5_Coaching onBack={() => nav('menu')} />
-  }
-  if (screen === 'evaluation') {
-    return <Screen6_Evaluation onBack={() => nav('menu')} />
   }
   return null
 }
