@@ -192,21 +192,6 @@ export default function Screen4_MidReview({ onBack }) {
                   </div>
                 </div>
 
-                {/* ⭐ 좋은 조언 히스토리 */}
-                {(selected.goodAdvices || []).length > 0 && (
-                  <div style={s.section}>
-                    <div style={s.sectionLabel}>⭐ 저장된 좋은 조언</div>
-                    <div style={s.goodAdviceList}>
-                      {(selected.goodAdvices || []).map((a, i) => (
-                        <div key={i} style={s.goodAdviceItem}>
-                          <div style={s.goodAdviceText}>💡 {a.text}</div>
-                          <div style={s.goodAdviceDate}>{a.date}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* 📈 성과 추이 타임라인 */}
                 <div style={s.section}>
                   <div style={s.sectionRowBetween}>
@@ -255,6 +240,21 @@ export default function Screen4_MidReview({ onBack }) {
                     </div>
                   )}
                 </div>
+
+                {/* ⭐ 좋은 조언 히스토리 */}
+                {(selected.goodAdvices || []).length > 0 && (
+                  <div style={s.section}>
+                    <div style={s.sectionLabel}>⭐ 저장된 좋은 조언</div>
+                    <div style={s.goodAdviceList}>
+                      {(selected.goodAdvices || []).map((a, i) => (
+                        <div key={i} style={s.goodAdviceItem}>
+                          <div style={s.goodAdviceText}>💡 {a.text}</div>
+                          <div style={s.goodAdviceDate}>{a.date}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* 🤖 AI 개선 조언 */}
                 <div style={s.section}>
