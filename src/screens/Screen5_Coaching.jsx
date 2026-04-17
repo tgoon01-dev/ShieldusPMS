@@ -62,10 +62,110 @@ const SITUATION_TYPES = [
   },
 ]
 
+function SessionDetailModal({ session, onClose }) {
+  const typeInfo = SITUATION_TYPES.find(t => t.id === session.situationTypeId)
+  const dateStr = session.date
+    ? new Date(session.date).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '날짜 미기록'
+  const fb = session.feedback
+  const situationLabel = session.situation?.replace(/^\[.*?\]\s*/, '') || ''
+
+  return (
+    <div style={modal.overlay} onClick={onClose}>
+      <div style={modal.box} onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div style={modal.header}>
+          <div style={modal.headerLeft}>
+            <span style={{ ...modal.typeBadge, background: typeInfo?.bgColor || '#f7fafc', color: typeInfo?.color || '#718096' }}>
+              {typeInfo?.icon} {typeInfo?.title || '면담'}
+            </span>
+            <div style={modal.headerTitle}>{session.assigneeName || '담당자 미기록'}</div>
+            <div style={modal.headerMeta}>{dateStr}</div>
+          </div>
+          <button style={modal.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={modal.body}>
+          {/* 면담 기본 정보 */}
+          <div style={modal.infoRow}>
+            {situationLabel && <div style={modal.infoItem}><span style={modal.infoLabel}>상황</span>{situationLabel}</div>}
+            {session.goalTitle && <div style={modal.infoItem}><span style={modal.infoLabel}>KPI</span>{session.goalTitle}</div>}
+            {session.traits?.length > 0 && (
+              <div style={modal.infoItem}>
+                <span style={modal.infoLabel}>성향</span>
+                <span style={modal.traitsWrap}>
+                  {session.traits.map(t => <span key={t} style={modal.traitChip}>{t}</span>)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* 대화 흐름 */}
+          {session.messages?.length > 0 && (
+            <div style={modal.section}>
+              <div style={modal.sectionTitle}>💬 면담 대화 흐름</div>
+              <div style={modal.chatLog}>
+                {session.messages.map((msg, i) => (
+                  <div key={i} style={{ ...modal.msgRow, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                    {msg.role === 'assistant' && (
+                      <div style={{ ...modal.avatar, background: typeInfo?.color || '#a0aec0' }}>
+                        {session.assigneeName?.charAt(0) || '?'}
+                      </div>
+                    )}
+                    <div style={{ ...modal.bubble, ...(msg.role === 'user' ? modal.userBubble : modal.memberBubble) }}>
+                      {msg.content}
+                    </div>
+                    {msg.role === 'user' && <div style={modal.meAvatar}>나</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 피드백 결과 */}
+          {fb && (
+            <div style={modal.section}>
+              <div style={modal.sectionTitle}>📝 면담 피드백 결과</div>
+              <div style={modal.overallBox}>{fb.overallComment}</div>
+              <div style={modal.fbGrid}>
+                <div style={{ ...modal.fbCard, borderTop: '3px solid #48bb78' }}>
+                  <div style={modal.fbCardTitle}>✅ 잘한 점</div>
+                  {fb.strengths?.map((s, i) => (
+                    <div key={i} style={modal.fbItem}><span style={modal.fbNum}>{i+1}</span>{s}</div>
+                  ))}
+                </div>
+                <div style={{ ...modal.fbCard, borderTop: '3px solid #fc8181' }}>
+                  <div style={modal.fbCardTitle}>💡 개선 방안</div>
+                  {fb.improvements?.map((s, i) => (
+                    <div key={i} style={modal.fbItem}><span style={modal.fbNum}>{i+1}</span>{s}</div>
+                  ))}
+                </div>
+              </div>
+              {fb.tipForNext && (
+                <div style={modal.tipBox}>
+                  <span style={modal.tipLabel}>🎯 핵심 조언</span> {fb.tipForNext}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!fb && session.messages?.length > 0 && (
+            <div style={modal.noFeedback}>면담 종료 후 피드백 분석을 받지 않은 세션입니다.</div>
+          )}
+          {(!session.messages || session.messages.length === 0) && (
+            <div style={modal.noFeedback}>대화 기록이 없습니다.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Screen5_Coaching({ onBack }) {
-  const { getProfile, getGoals, addCoachingSession, updateCoachingSession } = useStore()
+  const { getProfile, getGoals, getCoachingSessions, addCoachingSession, updateCoachingSession } = useStore()
   const profile = getProfile()
   const goals = getGoals()
+  const sessions = getCoachingSessions()
 
   const [step, setStep] = useState('situation-type') // situation-type | setup | chat | feedback
   const [situationType, setSituationType] = useState(null)
@@ -78,6 +178,7 @@ export default function Screen5_Coaching({ onBack }) {
   const [loading, setLoading] = useState(false)
   const [sessionId, setSessionId] = useState(null)
   const [feedback, setFeedback] = useState(null)
+  const [viewSession, setViewSession] = useState(null) // 팝업으로 볼 세션
   const chatEndRef = useRef(null)
 
   useEffect(() => {
@@ -113,6 +214,8 @@ export default function Screen5_Coaching({ onBack }) {
     const fullSituation = `[${selectedSituationType.title}] ${situation}`
     addCoachingSession({
       id,
+      date: new Date().toISOString(),
+      situationTypeId: situationType,
       situation: fullSituation,
       goalTitle: selectedGoal?.kpi?.title || null,
       assigneeName: selectedAssignee,
@@ -189,6 +292,9 @@ export default function Screen5_Coaching({ onBack }) {
 
   // ── Step 1: 상황 유형 선택 ──────────────────────────────────
   if (step === 'situation-type') {
+    const sortedSessions = [...sessions].sort((a, b) =>
+      (b.date || b.id) > (a.date || a.id) ? 1 : -1
+    )
     return (
       <div style={styles.bg}>
         <div style={styles.container}>
@@ -217,7 +323,63 @@ export default function Screen5_Coaching({ onBack }) {
               </button>
             ))}
           </div>
+
+          {/* 면담 기록 타임라인 */}
+          {sortedSessions.length > 0 && (
+            <div style={styles.timelineCard}>
+              <div style={styles.timelineHeader}>
+                <div style={styles.timelineTitle}>📋 면담 기록</div>
+                <div style={styles.timelineCount}>{sortedSessions.length}건</div>
+              </div>
+              <div style={styles.timelineList}>
+                {sortedSessions.map((s, idx) => {
+                  const typeInfo = SITUATION_TYPES.find(t => t.id === s.situationTypeId)
+                  const dateStr = s.date
+                    ? new Date(s.date).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                    : '날짜 미기록'
+                  const timeStr = s.date
+                    ? new Date(s.date).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                    : ''
+                  const hasFeedback = !!s.feedback
+                  return (
+                    <div key={s.id} style={styles.tlItem} onClick={() => setViewSession(s)}>
+                      <div style={styles.tlLeft}>
+                        <div style={{ ...styles.tlTypeDot, background: typeInfo?.color || '#a0aec0' }} />
+                        {idx < sortedSessions.length - 1 && <div style={styles.tlConnector} />}
+                      </div>
+                      <div style={styles.tlBody}>
+                        <div style={styles.tlTopRow}>
+                          <span style={{ ...styles.tlTypeBadge, background: typeInfo?.bgColor || '#f7fafc', color: typeInfo?.color || '#718096' }}>
+                            {typeInfo?.icon} {typeInfo?.title || '면담'}
+                          </span>
+                          {hasFeedback && <span style={styles.tlFeedbackBadge}>✅ 피드백 완료</span>}
+                        </div>
+                        <div style={styles.tlAssignee}>{s.assigneeName || '담당자 미기록'}</div>
+                        {s.traits?.length > 0 && (
+                          <div style={styles.tlTraits}>
+                            {s.traits.slice(0, 3).map(t => (
+                              <span key={t} style={styles.tlTrait}>{t}</span>
+                            ))}
+                            {s.traits.length > 3 && <span style={styles.tlTrait}>+{s.traits.length - 3}</span>}
+                          </div>
+                        )}
+                        <div style={styles.tlMeta}>
+                          {dateStr} {timeStr} · {s.messages?.length || 0}개 메시지
+                        </div>
+                      </div>
+                      <div style={styles.tlArrow}>›</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* 세션 상세 팝업 */}
+        {viewSession && (
+          <SessionDetailModal session={viewSession} onClose={() => setViewSession(null)} />
+        )}
       </div>
     )
   }
@@ -637,6 +799,26 @@ const styles = {
   chatInput: { flex: 1, padding: '10px 14px', border: '2px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', resize: 'none', outline: 'none', fontFamily: 'inherit' },
   sendBtn: { padding: '10px 20px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, alignSelf: 'flex-end' },
 
+  // 타임라인
+  timelineCard: { background: 'white', borderRadius: '16px', padding: '20px 24px', marginTop: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
+  timelineHeader: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' },
+  timelineTitle: { fontSize: '15px', fontWeight: 800, color: '#2d3748', flex: 1 },
+  timelineCount: { fontSize: '13px', color: '#a0aec0', fontWeight: 600 },
+  timelineList: { display: 'flex', flexDirection: 'column' },
+  tlItem: { display: 'flex', gap: '14px', cursor: 'pointer', padding: '10px 8px', borderRadius: '10px', transition: 'background 0.15s' },
+  tlLeft: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '12px', flexShrink: 0, paddingTop: '4px' },
+  tlTypeDot: { width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0 },
+  tlConnector: { flex: 1, width: '2px', background: '#e2e8f0', marginTop: '4px', minHeight: '24px' },
+  tlBody: { flex: 1, paddingBottom: '14px' },
+  tlTopRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' },
+  tlTypeBadge: { padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 },
+  tlFeedbackBadge: { fontSize: '11px', color: '#276749', background: '#f0fff4', border: '1px solid #9ae6b4', borderRadius: '10px', padding: '2px 8px' },
+  tlAssignee: { fontSize: '14px', fontWeight: 700, color: '#2d3748', marginBottom: '4px' },
+  tlTraits: { display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' },
+  tlTrait: { fontSize: '11px', background: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1px 7px', color: '#718096' },
+  tlMeta: { fontSize: '11px', color: '#a0aec0' },
+  tlArrow: { fontSize: '20px', color: '#cbd5e0', alignSelf: 'center', flexShrink: 0 },
+
   // 피드백
   restartBtn: { padding: '8px 16px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '13px', color: '#718096' },
   overallCard: { background: 'white', borderRadius: '16px', padding: '24px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
@@ -650,4 +832,39 @@ const styles = {
   tipCard: { background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 12px rgba(102,126,234,0.3)' },
   tipTitle: { fontSize: '12px', fontWeight: 700, opacity: 0.8, marginBottom: '10px', textTransform: 'uppercase' },
   tipText: { fontSize: '16px', lineHeight: 1.7 },
+}
+
+const modal = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '20px', overflowY: 'auto' },
+  box: { background: 'white', borderRadius: '20px', width: '100%', maxWidth: '680px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', marginTop: '20px', marginBottom: '20px' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '24px 28px 16px', borderBottom: '1px solid #f0f4f8' },
+  headerLeft: { display: 'flex', flexDirection: 'column', gap: '4px' },
+  typeBadge: { display: 'inline-block', padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700, alignSelf: 'flex-start' },
+  headerTitle: { fontSize: '20px', fontWeight: 800, color: '#1a202c' },
+  headerMeta: { fontSize: '12px', color: '#a0aec0' },
+  closeBtn: { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#718096', padding: '4px', flexShrink: 0 },
+  body: { padding: '20px 28px 28px', display: 'flex', flexDirection: 'column', gap: '20px' },
+  infoRow: { background: '#f7fafc', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' },
+  infoItem: { display: 'flex', gap: '10px', fontSize: '13px', color: '#2d3748', alignItems: 'flex-start' },
+  infoLabel: { fontWeight: 700, color: '#a0aec0', fontSize: '11px', textTransform: 'uppercase', width: '36px', flexShrink: 0, paddingTop: '1px' },
+  traitsWrap: { display: 'flex', gap: '4px', flexWrap: 'wrap' },
+  traitChip: { padding: '2px 8px', background: '#edf2f7', borderRadius: '10px', fontSize: '11px', color: '#4a5568' },
+  section: { display: 'flex', flexDirection: 'column', gap: '12px' },
+  sectionTitle: { fontSize: '14px', fontWeight: 800, color: '#2d3748' },
+  chatLog: { maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px', background: '#f7fafc', borderRadius: '10px' },
+  msgRow: { display: 'flex', gap: '8px', alignItems: 'flex-end' },
+  avatar: { width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, color: 'white', flexShrink: 0 },
+  meAvatar: { width: '28px', height: '28px', borderRadius: '50%', background: '#4299e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: 'white', flexShrink: 0 },
+  bubble: { maxWidth: '75%', padding: '10px 14px', borderRadius: '14px', fontSize: '13px', lineHeight: 1.6 },
+  userBubble: { background: '#4299e1', color: 'white', borderBottomRightRadius: '3px' },
+  memberBubble: { background: 'white', color: '#2d3748', borderBottomLeftRadius: '3px', border: '1px solid #e2e8f0' },
+  overallBox: { background: '#f0f4f8', borderRadius: '10px', padding: '14px 16px', fontSize: '14px', color: '#2d3748', lineHeight: 1.7 },
+  fbGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
+  fbCard: { background: '#f7fafc', borderRadius: '10px', padding: '14px' },
+  fbCardTitle: { fontSize: '13px', fontWeight: 800, marginBottom: '10px', color: '#2d3748' },
+  fbItem: { display: 'flex', gap: '8px', fontSize: '12px', color: '#4a5568', lineHeight: 1.6, marginBottom: '8px', alignItems: 'flex-start' },
+  fbNum: { width: '18px', height: '18px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, flexShrink: 0 },
+  tipBox: { background: 'linear-gradient(135deg, #667eea22, #764ba222)', border: '1px solid #764ba240', borderRadius: '10px', padding: '14px 16px', fontSize: '13px', color: '#2d3748', lineHeight: 1.7 },
+  tipLabel: { fontWeight: 800, color: '#764ba2' },
+  noFeedback: { background: '#f7fafc', borderRadius: '10px', padding: '16px', textAlign: 'center', fontSize: '13px', color: '#a0aec0' },
 }
