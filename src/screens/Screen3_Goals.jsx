@@ -127,7 +127,7 @@ export default function Screen3_Goals({ onBack }) {
   const [selectedCsf, setSelectedCsf] = useState(null)
 
   // KPI 단계
-  const [kpiSuggestion, setKpiSuggestion] = useState(null)
+  const [kpiSuggestions, setKpiSuggestions] = useState([])
 
   // 직접 입력
   const [manualForm, setManualForm] = useState(false)
@@ -163,15 +163,15 @@ export default function Screen3_Goals({ onBack }) {
     setLoading(false)
   }
 
-  // ── Step 2: CSF 선택 → KPI 생성 ───────────────────────────
+  // ── Step 2: CSF 선택 → KPI 3개 생성 (CSF 화면 유지) ────────
   const handleSelectCsf = async (csf) => {
     setSelectedCsf(csf)
+    setKpiSuggestions([])
     setLoading(true)
     setError('')
     try {
       const result = await generateKpiFromCsf(taskInput, csf, profile.business, profile.department)
-      setKpiSuggestion(result.kpi)
-      setGenStep('kpi')
+      setKpiSuggestions(result.kpis)
     } catch (e) {
       setError('KPI 생성 중 오류가 발생했습니다: ' + e.message)
     }
@@ -180,11 +180,12 @@ export default function Screen3_Goals({ onBack }) {
 
   const handleRetryKpi = async () => {
     if (!selectedCsf) return
+    setKpiSuggestions([])
     setLoading(true)
     setError('')
     try {
       const result = await generateKpiFromCsf(taskInput, selectedCsf, profile.business, profile.department)
-      setKpiSuggestion(result.kpi)
+      setKpiSuggestions(result.kpis)
     } catch (e) {
       setError('KPI 생성 중 오류가 발생했습니다: ' + e.message)
     }
@@ -192,11 +193,11 @@ export default function Screen3_Goals({ onBack }) {
   }
 
   // ── KPI 보드에 추가 ────────────────────────────────────────
-  const handleAddKpi = () => {
+  const handleAddKpi = (kpi) => {
     const newGoal = {
       id: Date.now().toString(),
       task: taskInput,
-      kpi: { ...kpiSuggestion },
+      kpi: { ...kpi },
       assignees: [],
       currentValue: null,
       scores: { strategicImportance: 3, difficulty: 3, contribution: 3 },
@@ -206,7 +207,7 @@ export default function Screen3_Goals({ onBack }) {
     setTaskInput('')
     setCsfList([])
     setSelectedCsf(null)
-    setKpiSuggestion(null)
+    setKpiSuggestions([])
   }
 
   const handleAddManual = () => {
@@ -364,71 +365,88 @@ export default function Screen3_Goals({ onBack }) {
             </>
           )}
 
-          {/* Step 1: CSF 선택 */}
+          {/* Step 1+2: CSF 선택 & KPI 추천 (한 화면) */}
           {genStep === 'csf' && (
             <div style={styles.stepBox}>
               <div style={styles.stepHeader}>
                 <div style={styles.stepBadge}>STEP 1</div>
                 <div style={styles.stepTitle}>핵심 성공요인(CSF) 선택</div>
-                <button style={styles.stepBackBtn} onClick={() => setGenStep(null)}>← 업무 재입력</button>
+                <button style={styles.stepBackBtn} onClick={() => { setGenStep(null); setSelectedCsf(null); setKpiSuggestions([]) }}>← 업무 재입력</button>
               </div>
               <div style={styles.taskChip}>"{taskInput}"</div>
-              <div style={styles.stepDesc}>이 업무의 성공을 위해 가장 중요한 요인을 선택하세요. 선택한 요인을 기반으로 KPI가 정밀하게 설계됩니다.</div>
-              {loading ? (
-                <div style={styles.loadingBox}>⏳ 핵심 성공요인 분석 중...</div>
-              ) : (
-                <div style={styles.csfGrid}>
-                  {csfList.map((csf, i) => (
+              <div style={styles.stepDesc}>가장 중요한 핵심 성공요인을 선택하세요. 선택 시 아래에 KPI 3개가 바로 제안됩니다.</div>
+
+              <div style={styles.csfGrid}>
+                {csfList.map((csf, i) => {
+                  const isSelected = selectedCsf?.title === csf.title
+                  return (
                     <button
                       key={i}
-                      style={{ ...styles.csfCard, borderColor: CSF_COLORS[i].border }}
+                      style={{
+                        ...styles.csfCard,
+                        borderColor: isSelected ? CSF_COLORS[i].color : CSF_COLORS[i].border,
+                        borderWidth: isSelected ? '2px' : '2px',
+                        background: isSelected ? CSF_COLORS[i].bg : 'white',
+                        boxShadow: isSelected ? `0 0 0 3px ${CSF_COLORS[i].color}30` : 'none',
+                      }}
                       onClick={() => handleSelectCsf(csf)}
                     >
-                      <div style={{ ...styles.csfIcon, background: CSF_COLORS[i].bg, color: CSF_COLORS[i].color }}>
-                        {CSF_ICONS[i]}
+                      <div style={{ ...styles.csfIcon, background: isSelected ? CSF_COLORS[i].color : CSF_COLORS[i].bg, color: isSelected ? 'white' : CSF_COLORS[i].color }}>
+                        {isSelected ? '✓' : CSF_ICONS[i]}
                       </div>
                       <div style={{ ...styles.csfFocus, color: CSF_COLORS[i].color }}>{csf.focus}</div>
                       <div style={styles.csfTitle}>{csf.title}</div>
                       <div style={styles.csfDesc}>{csf.description}</div>
-                      <div style={{ ...styles.csfSelectBtn, background: CSF_COLORS[i].color }}>
-                        이 요인으로 KPI 생성 →
-                      </div>
+                      {!isSelected && (
+                        <div style={{ ...styles.csfSelectBtn, background: CSF_COLORS[i].color }}>
+                          이 요인으로 KPI 생성 →
+                        </div>
+                      )}
+                      {isSelected && (
+                        <div style={{ ...styles.csfSelectBtn, background: CSF_COLORS[i].color }}>
+                          ✓ 선택됨 · 다른 요인 선택 가능
+                        </div>
+                      )}
                     </button>
-                  ))}
-                </div>
-              )}
-              {error && <div style={styles.errorBox}>{error}</div>}
-            </div>
-          )}
+                  )
+                })}
+              </div>
 
-          {/* Step 2: KPI 미리보기 */}
-          {genStep === 'kpi' && (
-            <div style={styles.stepBox}>
-              <div style={styles.stepHeader}>
-                <div style={{ ...styles.stepBadge, background: '#48bb78' }}>STEP 2</div>
-                <div style={styles.stepTitle}>KPI 확인 및 추가</div>
-                <button style={styles.stepBackBtn} onClick={() => setGenStep('csf')}>← CSF 다시 선택</button>
-              </div>
-              <div style={styles.csfSelectedBadge}>
-                핵심 성공요인: <strong>{selectedCsf?.title}</strong> ({selectedCsf?.focus})
-              </div>
-              {loading ? (
-                <div style={styles.loadingBox}>⏳ SMART KPI 설계 중...</div>
-              ) : kpiSuggestion && (
-                <div style={styles.kpiPreviewCard}>
-                  <div style={styles.kpiPreviewTitle}>{kpiSuggestion.title}</div>
-                  <div style={styles.kpiPreviewDesc}>{kpiSuggestion.description}</div>
-                  <div style={styles.kpiPreviewMeta}>
-                    <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>목표</span>{kpiSuggestion.targetValue}{kpiSuggestion.unit}</div>
-                    <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>기간</span>{kpiSuggestion.period}</div>
-                    <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>측정</span>{kpiSuggestion.measurement}</div>
+              {/* KPI 추천 영역 */}
+              {selectedCsf && (
+                <div style={styles.kpiSection}>
+                  <div style={styles.kpiSectionHeader}>
+                    <div style={styles.stepBadge2}>STEP 2</div>
+                    <div style={styles.kpiSectionTitle}>
+                      <strong>{selectedCsf.title}</strong> 기반 KPI 추천
+                    </div>
+                    {!loading && kpiSuggestions.length > 0 && (
+                      <button style={styles.retryKpiBtn} onClick={handleRetryKpi}>↻ 다시 생성</button>
+                    )}
                   </div>
-                  <div style={styles.kpiPreviewFooter}>
-                    <button style={styles.retryKpiBtn} onClick={handleRetryKpi}>↻ 다시 생성</button>
-                    <button style={styles.addKpiBtn} onClick={handleAddKpi}>✅ 보드에 추가</button>
-                  </div>
+
+                  {loading ? (
+                    <div style={styles.loadingBox}>⏳ SMART KPI 설계 중...</div>
+                  ) : (
+                    <div style={styles.kpiCards}>
+                      {kpiSuggestions.map((kpi, i) => (
+                        <div key={i} style={styles.kpiPreviewCard}>
+                          <div style={styles.kpiPerspective}>{['①', '②', '③'][i]} {kpi.perspective}</div>
+                          <div style={styles.kpiPreviewTitle}>{kpi.title}</div>
+                          <div style={styles.kpiPreviewDesc}>{kpi.description}</div>
+                          <div style={styles.kpiPreviewMeta}>
+                            <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>목표</span>{kpi.targetValue}{kpi.unit}</div>
+                            <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>기간</span>{kpi.period}</div>
+                            <div style={styles.kpiMetaItem}><span style={styles.kpiMetaLabel}>측정</span>{kpi.measurement}</div>
+                          </div>
+                          <button style={styles.addKpiBtn} onClick={() => handleAddKpi(kpi)}>✅ 보드에 추가</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
+
               {error && <div style={styles.errorBox}>{error}</div>}
             </div>
           )}
@@ -554,16 +572,20 @@ const styles = {
   csfSelectBtn: { color: 'white', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, textAlign: 'center', marginTop: '4px' },
 
   // KPI Preview
-  csfSelectedBadge: { background: '#f0fff4', border: '1px solid #9ae6b4', borderRadius: '8px', padding: '8px 14px', fontSize: '13px', color: '#276749', marginBottom: '16px' },
-  kpiPreviewCard: { border: '2px solid #4299e1', borderRadius: '14px', padding: '22px', background: '#f7fbff' },
-  kpiPreviewTitle: { fontSize: '18px', fontWeight: 800, color: '#1a202c', marginBottom: '8px' },
-  kpiPreviewDesc: { fontSize: '13px', color: '#4a5568', lineHeight: 1.6, marginBottom: '16px' },
-  kpiPreviewMeta: { display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' },
-  kpiMetaItem: { display: 'flex', gap: '10px', fontSize: '13px', color: '#2d3748' },
-  kpiMetaLabel: { fontWeight: 700, color: '#718096', width: '40px', fontSize: '12px', textTransform: 'uppercase', flexShrink: 0 },
-  kpiPreviewFooter: { display: 'flex', gap: '10px', justifyContent: 'flex-end' },
-  retryKpiBtn: { padding: '10px 18px', background: '#ebf8ff', color: '#2b6cb0', border: '2px solid #bee3f8', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 },
-  addKpiBtn: { padding: '10px 24px', background: '#38a169', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 },
+  kpiSection: { marginTop: '24px', borderTop: '2px dashed #e2e8f0', paddingTop: '20px' },
+  kpiSectionHeader: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' },
+  stepBadge2: { background: '#48bb78', color: 'white', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', flexShrink: 0 },
+  kpiSectionTitle: { flex: 1, fontSize: '15px', color: '#2d3748' },
+  kpiCards: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
+  kpiPreviewCard: { border: '2px solid #e2e8f0', borderRadius: '14px', padding: '18px', background: 'white', display: 'flex', flexDirection: 'column', gap: '8px' },
+  kpiPerspective: { fontSize: '11px', fontWeight: 700, color: '#4299e1', textTransform: 'uppercase', letterSpacing: '0.5px' },
+  kpiPreviewTitle: { fontSize: '15px', fontWeight: 800, color: '#1a202c' },
+  kpiPreviewDesc: { fontSize: '12px', color: '#718096', lineHeight: 1.6, flex: 1 },
+  kpiPreviewMeta: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: '#f7fafc', borderRadius: '8px' },
+  kpiMetaItem: { display: 'flex', gap: '8px', fontSize: '12px', color: '#2d3748' },
+  kpiMetaLabel: { fontWeight: 700, color: '#a0aec0', width: '36px', fontSize: '11px', textTransform: 'uppercase', flexShrink: 0 },
+  retryKpiBtn: { padding: '7px 14px', background: '#ebf8ff', color: '#2b6cb0', border: '2px solid #bee3f8', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, flexShrink: 0 },
+  addKpiBtn: { width: '100%', padding: '10px', background: '#38a169', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700, marginTop: '4px' },
 
   memberCard: { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
   memberTitle: { fontWeight: 700, color: '#2d3748', marginBottom: '12px' },

@@ -48,7 +48,7 @@ export async function generateKpiFromCsf(task, csf, business, department) {
     messages: [{
       role: 'user',
       content: `당신은 기업 성과관리 전문가입니다.
-아래 업무와 핵심 성공요인을 기반으로 SMART KPI 1개를 제안해주세요.
+아래 업무와 핵심 성공요인을 기반으로 서로 다른 관점의 SMART KPI 3개를 제안해주세요.
 
 업무: ${task}
 핵심 성공요인: ${csf.title} (${csf.focus})
@@ -58,17 +58,22 @@ CSF 설명: ${csf.description}
 
 반드시 아래 JSON 형식으로만 응답하세요:
 {
-  "kpi": {
-    "title": "KPI명 (구체적이고 측정 가능하게)",
-    "description": "KPI 상세 설명 (2문장)",
-    "targetValue": "목표 수치",
-    "unit": "단위 (건, %, 점, 회 등)",
-    "period": "기간 (예: 2025년 연간)",
-    "measurement": "측정 방법 (1문장)"
-  }
+  "kpis": [
+    {
+      "perspective": "관점 (예: 정량, 품질, 프로세스)",
+      "title": "KPI명 (구체적이고 측정 가능하게)",
+      "description": "KPI 상세 설명 (1~2문장)",
+      "targetValue": "목표 수치",
+      "unit": "단위 (건, %, 점, 회 등)",
+      "period": "기간 (예: 2025년 연간)",
+      "measurement": "측정 방법 (1문장)"
+    },
+    { "perspective": "관점2", "title": "...", "description": "...", "targetValue": "...", "unit": "...", "period": "...", "measurement": "..." },
+    { "perspective": "관점3", "title": "...", "description": "...", "targetValue": "...", "unit": "...", "period": "...", "measurement": "..." }
+  ]
 }`
     }],
-    max_tokens: 800,
+    max_tokens: 1500,
   })
   const text = response.content[0].text.trim()
   const jsonMatch = text.match(/\{[\s\S]*\}/)
