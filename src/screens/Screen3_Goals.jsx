@@ -155,7 +155,7 @@ export default function Screen3_Goals({ onBack }) {
       const result = await generateCsfSuggestions(taskInput, profile.business, profile.department)
       setCsfList(result.csfs)
       setSelectedCsf(null)
-      setKpiSuggestion(null)
+      setKpiSuggestions([])
       setGenStep('csf')
     } catch (e) {
       setError('생성 중 오류가 발생했습니다: ' + e.message)
