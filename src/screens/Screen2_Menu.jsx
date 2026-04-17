@@ -53,7 +53,7 @@ export default function Screen2_Menu({ onSelect, onLogout }) {
       <div style={styles.container}>
         <div style={styles.header}>
           <div>
-            <div style={styles.greeting}>안녕하세요, {profile.department} 팀장님 👋</div>
+            <div style={styles.greeting}>안녕하세요, {profile.name || profile.department} 팀장님 👋</div>
             <div style={styles.sub}>{profile.business} · {profile.email}</div>
           </div>
           <button style={styles.logoutBtn} onClick={onLogout}>로그아웃</button>

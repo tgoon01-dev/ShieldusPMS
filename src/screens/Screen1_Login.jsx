@@ -7,6 +7,7 @@ const BUSINESSES = ['물리보안', '사이버보안', '인프라보안', '경�
 export default function Screen1_Login({ onNext }) {
   const [business, setBusiness] = useState('')
   const [department, setDepartment] = useState('')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [existingData, setExistingData] = useState(false)
   const [loadingUser, setLoadingUser] = useState(false)
@@ -18,6 +19,7 @@ export default function Screen1_Login({ onNext }) {
     if (allData[email]?.profile) {
       setBusiness(allData[email].profile.business || '')
       setDepartment(allData[email].profile.department || '')
+      setName(allData[email].profile.name || '')
       setExistingData(true)
       return
     }
@@ -33,6 +35,7 @@ export default function Screen1_Login({ onNext }) {
     if (remote?.profile) {
       setBusiness(remote.profile.business || '')
       setDepartment(remote.profile.department || '')
+      setName(remote.profile.name || '')
       setExistingData(true)
     } else {
       setExistingData(false)
@@ -40,8 +43,8 @@ export default function Screen1_Login({ onNext }) {
   }
 
   const handleStart = async () => {
-    if (!business || !department || !email) return
-    const profile = { email: email.trim(), business, department }
+    if (!business || !department || !name || !email) return
+    const profile = { email: email.trim(), business, department, name: name.trim() }
     // Supabase에서 최신 데이터 불러와서 초기화 (실패해도 로컬 데이터로 진행)
     let remote = null
     try {
@@ -100,6 +103,16 @@ export default function Screen1_Login({ onNext }) {
         </div>
 
         <div style={styles.field}>
+          <label style={styles.label}>성명</label>
+          <input
+            style={styles.input}
+            placeholder="예: 홍길동"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+        </div>
+
+        <div style={styles.field}>
           <label style={styles.label}>이메일 주소</label>
           <input
             style={styles.input}
@@ -117,10 +130,10 @@ export default function Screen1_Login({ onNext }) {
         <button
           style={{
             ...styles.startBtn,
-            ...(!business || !department || !email ? styles.startBtnDisabled : {})
+            ...(!business || !department || !name || !email ? styles.startBtnDisabled : {})
           }}
           onClick={handleStart}
-          disabled={!business || !department || !email}
+          disabled={!business || !department || !name || !email}
         >
           성과관리 시작 →
         </button>
