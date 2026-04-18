@@ -148,10 +148,11 @@ function KpiDashboard({ goals, onGoToGoals }) {
 }
 
 export default function Screen2_Menu({ onSelect, onLogout }) {
-  const getProfile = useStore(s => s.getProfile)
-  const getGoals = useStore(s => s.getGoals)
-  const profile = getProfile()
-  const goals = getGoals()
+  const allData = useStore(s => s.allData)
+  const currentEmail = useStore(s => s.currentEmail)
+  const userData = allData[currentEmail] || {}
+  const profile = userData.profile || {}
+  const goals = userData.goals || []
   const hasGoals = goals.length > 0
 
   const isEnabled = (item) => {
