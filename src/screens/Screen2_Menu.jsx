@@ -36,8 +36,8 @@ const MENU_ITEMS = [
 
 function getRate(goal) {
   const val = (goal.currentValue !== null && goal.currentValue !== undefined)
-    ? Number(goal.currentValue) : null
-  const target = Number(goal.kpi?.targetValue ?? goal.targetValue)
+    ? parseFloat(goal.currentValue) : null
+  const target = parseFloat(goal.kpi?.targetValue ?? goal.targetValue ?? 0)
   if (val === null || isNaN(val) || isNaN(target) || target === 0) return null
   return Math.min(Math.round((val / target) * 100), 100)
 }
@@ -134,7 +134,7 @@ function KpiDashboard({ goals, onGoToGoals }) {
                   </div>
                   {rate !== null && (
                     <div style={db.valueText}>
-                      {goal.currentValue}{unit} / {targetValue}{unit}
+                      {goal.currentValue}{unit} / 목표 {parseFloat(targetValue)}{unit}
                     </div>
                   )}
                 </div>
