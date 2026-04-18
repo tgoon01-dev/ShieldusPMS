@@ -34,34 +34,21 @@ const MENU_ITEMS = [
   },
 ]
 
-function getAchievementRate(goal) {
+function getRate(goal) {
   const val = (goal.currentValue !== null && goal.currentValue !== undefined)
     ? Number(goal.currentValue) : null
-  const target = Number(goal.targetValue)
+  const target = Number(goal.kpi?.targetValue ?? goal.targetValue)
   if (val === null || isNaN(val) || isNaN(target) || target === 0) return null
-  return Math.min(Math.round((val / target) * 100), 200)
+  return Math.min(Math.round((val / target) * 100), 100)
 }
 
-function rateColor(rate) {
-  if (rate === null) return '#a0aec0'
-  if (rate >= 80) return '#38a169'
-  if (rate >= 50) return '#dd6b20'
-  return '#e53e3e'
-}
-
-function rateBg(rate) {
-  if (rate === null) return '#f7fafc'
-  if (rate >= 80) return '#f0fff4'
-  if (rate >= 50) return '#fffaf0'
-  return '#fff5f5'
-}
-
-const PLACEHOLDER_WIDTHS = [72, 55, 40]
+const NAVY_TRACK = '#d0daea'   // 옅은 남색 (100% 배경)
+const NAVY_FILL  = '#2c5282'   // 짙은 남색 (달성 채움)
+const PLACEHOLDER_WIDTHS = [68, 52, 38]
 
 function KpiDashboard({ goals, onGoToGoals }) {
   const isEmpty = !goals || goals.length === 0
-
-  const rates = isEmpty ? [] : goals.map(g => getAchievementRate(g))
+  const rates = isEmpty ? [] : goals.map(g => getRate(g))
   const withData = rates.filter(r => r !== null)
   const avgRate = withData.length > 0
     ? Math.round(withData.reduce((a, b) => a + b, 0) / withData.length)
@@ -69,45 +56,25 @@ function KpiDashboard({ goals, onGoToGoals }) {
 
   return (
     <div style={db.card}>
-      {/* Header row */}
+      {/* 헤더 */}
       <div style={db.topRow}>
         <div style={db.cardTitle}>📈 KPI 달성 현황</div>
         {!isEmpty && (
           <div style={db.summary}>
-            <div style={db.summaryItem}>
-              <span style={db.summaryNum}>{goals.length}</span>
-              <span style={db.summaryLabel}>전체</span>
-            </div>
-            <div style={db.vDivider} />
-            <div style={db.summaryItem}>
-              <span style={db.summaryNum}>{withData.length}</span>
-              <span style={db.summaryLabel}>측정 완료</span>
-            </div>
-            <div style={db.vDivider} />
-            <div style={db.summaryItem}>
-              <span style={{ ...db.summaryNum, color: avgRate !== null ? rateColor(avgRate) : '#a0aec0' }}>
-                {avgRate !== null ? `${avgRate}%` : '-'}
-              </span>
-              <span style={db.summaryLabel}>평균 달성률</span>
-            </div>
+            <span style={db.summaryText}>총 {goals.length}개</span>
+            <span style={db.summaryDot}>·</span>
+            <span style={db.summaryText}>측정 완료 {withData.length}개</span>
+            {avgRate !== null && (
+              <>
+                <span style={db.summaryDot}>·</span>
+                <span style={{ ...db.summaryText, color: NAVY_FILL, fontWeight: 700 }}>평균 {avgRate}%</span>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Overall average bar (only when data exists) */}
-      {!isEmpty && avgRate !== null && (
-        <div style={db.overallWrap}>
-          <div style={db.overallLabelRow}>
-            <span style={db.overallCaption}>전체 평균</span>
-            <span style={{ ...db.overallPct, color: rateColor(avgRate) }}>{avgRate}%</span>
-          </div>
-          <div style={db.overallTrack}>
-            <div style={{ ...db.overallFill, width: `${Math.min(avgRate, 100)}%`, background: rateColor(avgRate) }} />
-          </div>
-        </div>
-      )}
-
-      {/* Empty state: placeholder bars */}
+      {/* 빈 상태: 플레이스홀더 */}
       {isEmpty && (
         <div style={db.emptyWrap}>
           {PLACEHOLDER_WIDTHS.map((w, i) => (
@@ -116,7 +83,7 @@ function KpiDashboard({ goals, onGoToGoals }) {
               <div style={db.placeholderTrack}>
                 <div style={{ ...db.placeholderFill, width: `${w}%` }} />
               </div>
-              <div style={db.placeholderBadge} />
+              <div style={db.placeholderPct} />
             </div>
           ))}
           <div style={db.emptyOverlay}>
@@ -127,35 +94,49 @@ function KpiDashboard({ goals, onGoToGoals }) {
         </div>
       )}
 
-      {/* KPI rows */}
+      {/* KPI 가로 바 */}
       {!isEmpty && (
         <div style={db.kpiList}>
-          {goals.map(goal => {
-            const rate = getAchievementRate(goal)
-            const color = rateColor(rate)
-            const bg = rateBg(rate)
+          {goals.map((goal, idx) => {
+            const rate = getRate(goal)
+            const title = goal.kpi?.title ?? goal.title ?? ''
+            const targetValue = goal.kpi?.targetValue ?? goal.targetValue ?? ''
+            const unit = goal.kpi?.unit ?? goal.unit ?? ''
+            const assignees = goal.assignees || []
             return (
-              <div key={goal.id} style={{ ...db.kpiRow, background: bg }}>
+              <div key={goal.id} style={db.kpiRow}>
+                {/* 좌: 이름 + 담당자 */}
                 <div style={db.kpiLeft}>
-                  {goal.perspective && <div style={db.kpiPersp}>{goal.perspective}</div>}
-                  <div style={db.kpiTitle}>{goal.title}</div>
-                  <div style={db.kpiSub}>
-                    {rate !== null
-                      ? <>{goal.currentValue}{goal.unit} <span style={db.slash}>/</span> 목표 {goal.targetValue}{goal.unit}</>
-                      : <span style={db.noData}>달성 현황 미입력</span>}
+                  <div style={db.kpiTitle}>{title}</div>
+                  <div style={db.kpiAssignees}>
+                    {assignees.length > 0
+                      ? assignees.map((a, i) => (
+                          <span key={i} style={db.assigneeChip}>{a}</span>
+                        ))
+                      : <span style={db.noAssignee}>담당자 미배정</span>
+                    }
                   </div>
                 </div>
+                {/* 우: 바 + 수치 */}
                 <div style={db.kpiRight}>
-                  <div style={{ ...db.badge, color, borderColor: color + '55' }}>
-                    {rate !== null ? `${rate}%` : '-'}
+                  <div style={db.barWrap}>
+                    <div style={db.barTrack}>
+                      <div style={{
+                        ...db.barFill,
+                        width: rate !== null ? `${rate}%` : '0%',
+                      }} />
+                    </div>
+                    <span style={db.barPct}>
+                      {rate !== null
+                        ? `${rate}%`
+                        : <span style={db.noData}>미입력</span>}
+                    </span>
                   </div>
-                  <div style={db.barTrack}>
-                    <div style={{
-                      ...db.barFill,
-                      width: rate !== null ? `${Math.min(rate, 100)}%` : '0%',
-                      background: color,
-                    }} />
-                  </div>
+                  {rate !== null && (
+                    <div style={db.valueText}>
+                      {goal.currentValue}{unit} / {targetValue}{unit}
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -242,114 +223,65 @@ const db = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '12px',
+    marginBottom: '14px',
   },
   cardTitle: { fontSize: '14px', fontWeight: 700, color: '#2d3748' },
-  summary: { display: 'flex', alignItems: 'center', gap: '10px' },
-  summaryItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' },
-  summaryNum: { fontSize: '17px', fontWeight: 800, color: '#2d3748' },
-  summaryLabel: { fontSize: '10px', color: '#a0aec0', fontWeight: 600 },
-  vDivider: { width: '1px', height: '26px', background: '#e2e8f0' },
-  overallWrap: { marginBottom: '12px' },
-  overallLabelRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px' },
-  overallCaption: { fontSize: '11px', color: '#a0aec0' },
-  overallPct: { fontSize: '12px', fontWeight: 700 },
-  overallTrack: {
-    height: '8px',
-    background: '#edf2f7',
-    borderRadius: '999px',
-    overflow: 'hidden',
-  },
-  overallFill: {
-    height: '100%',
-    borderRadius: '999px',
-    transition: 'width 0.6s ease',
-  },
-  emptyWrap: {
-    position: 'relative',
-    padding: '8px 0',
-  },
-  placeholderRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginBottom: '10px',
-  },
-  placeholderLabel: {
-    width: '120px',
-    height: '10px',
-    background: '#edf2f7',
-    borderRadius: '4px',
-    flexShrink: 0,
-  },
-  placeholderTrack: {
-    flex: 1,
-    height: '10px',
-    background: '#edf2f7',
-    borderRadius: '999px',
-    overflow: 'hidden',
-  },
-  placeholderFill: {
-    height: '100%',
-    background: '#e2e8f0',
-    borderRadius: '999px',
-  },
-  placeholderBadge: {
-    width: '38px',
-    height: '20px',
-    background: '#edf2f7',
-    borderRadius: '6px',
-    flexShrink: 0,
-  },
+  summary: { display: 'flex', alignItems: 'center', gap: '6px' },
+  summaryText: { fontSize: '12px', color: '#718096' },
+  summaryDot: { fontSize: '12px', color: '#cbd5e0' },
+
+  // 빈 상태
+  emptyWrap: { position: 'relative', padding: '4px 0 8px' },
+  placeholderRow: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' },
+  placeholderLabel: { width: '130px', height: '32px', background: '#edf2f7', borderRadius: '6px', flexShrink: 0 },
+  placeholderTrack: { flex: 1, height: '10px', background: '#edf2f7', borderRadius: '999px', overflow: 'hidden' },
+  placeholderFill: { height: '100%', background: NAVY_TRACK, borderRadius: '999px' },
+  placeholderPct: { width: '34px', height: '16px', background: '#edf2f7', borderRadius: '4px', flexShrink: 0 },
   emptyOverlay: {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
-    background: 'rgba(247,250,252,0.88)',
-    borderRadius: '8px',
+    position: 'absolute', inset: 0,
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px',
+    background: 'rgba(247,250,252,0.9)', borderRadius: '8px',
   },
   emptyOverlayIcon: { fontSize: '22px' },
   emptyOverlayText: { fontSize: '13px', fontWeight: 600, color: '#718096' },
   emptyOverlayBtn: {
-    marginTop: '4px',
-    padding: '6px 16px',
-    background: '#4299e1',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
+    marginTop: '4px', padding: '6px 16px',
+    background: NAVY_FILL, color: 'white', border: 'none', borderRadius: '8px',
+    fontSize: '12px', fontWeight: 600, cursor: 'pointer',
   },
-  kpiList: { display: 'flex', flexDirection: 'column', gap: '6px' },
+
+  // KPI 행
+  kpiList: { display: 'flex', flexDirection: 'column', gap: '0px' },
   kpiRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 12px',
-    borderRadius: '8px',
+    display: 'flex', alignItems: 'center', gap: '16px',
+    padding: '10px 0',
+    borderBottom: '1px solid #f0f4f8',
   },
-  kpiLeft: { flex: 1, minWidth: 0 },
-  kpiPersp: { fontSize: '9px', color: '#a0aec0', fontWeight: 700, marginBottom: '1px', textTransform: 'uppercase' },
-  kpiTitle: { fontSize: '13px', fontWeight: 700, color: '#2d3748', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  kpiSub: { fontSize: '11px', color: '#718096', marginTop: '2px' },
-  slash: { color: '#cbd5e0' },
-  noData: { color: '#cbd5e0', fontStyle: 'italic' },
-  kpiRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px', marginLeft: '12px', minWidth: '90px' },
-  badge: {
-    fontSize: '12px',
-    fontWeight: 800,
-    border: '1px solid',
-    borderRadius: '5px',
+  kpiLeft: { width: '200px', flexShrink: 0 },
+  kpiTitle: { fontSize: '13px', fontWeight: 700, color: '#1a202c', marginBottom: '5px', lineHeight: 1.3 },
+  kpiAssignees: { display: 'flex', gap: '4px', flexWrap: 'wrap' },
+  assigneeChip: {
+    fontSize: '11px', color: '#4a5568',
+    background: '#edf2f7', borderRadius: '10px',
     padding: '1px 7px',
-    background: 'white',
   },
-  barTrack: { width: '80px', height: '5px', background: '#edf2f7', borderRadius: '999px', overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: '999px', transition: 'width 0.4s ease' },
+  noAssignee: { fontSize: '11px', color: '#cbd5e0', fontStyle: 'italic' },
+
+  kpiRight: { flex: 1, minWidth: 0 },
+  barWrap: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '3px' },
+  barTrack: {
+    flex: 1, height: '12px',
+    background: NAVY_TRACK,
+    borderRadius: '999px', overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%', borderRadius: '999px',
+    background: NAVY_FILL,
+    transition: 'width 0.5s ease',
+  },
+  barPct: { fontSize: '13px', fontWeight: 800, color: NAVY_FILL, width: '38px', textAlign: 'right', flexShrink: 0 },
+  valueText: { fontSize: '11px', color: '#a0aec0' },
+  noData: { fontSize: '11px', color: '#cbd5e0', fontStyle: 'italic', fontWeight: 400 },
 }
 
 const styles = {
