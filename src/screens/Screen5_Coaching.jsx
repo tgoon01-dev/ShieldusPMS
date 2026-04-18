@@ -403,6 +403,39 @@ export default function Screen5_Coaching({ onBack }) {
           </div>
 
           <div style={styles.setupCard}>
+            {/* KPI 선택 (선택사항) */}
+            {goals.length > 0 && (
+              <div style={styles.fieldGroup}>
+                <div style={styles.fieldLabel}>관련 KPI 선택 <span style={styles.optional}>(선택사항)</span></div>
+                <div style={styles.goalCards}>
+                  {goals.map((g, i) => (
+                    <button
+                      key={g.id}
+                      style={{
+                        ...styles.goalCard,
+                        borderColor: selectedGoalId === g.id ? selectedSituationType.color : '#e2e8f0',
+                        background: selectedGoalId === g.id ? selectedSituationType.bgColor : 'white',
+                      }}
+                      onClick={() => setSelectedGoalId(selectedGoalId === g.id ? '' : g.id)}
+                    >
+                      <div style={styles.goalCardNum}>{i + 1}</div>
+                      <div style={styles.goalCardContent}>
+                        <div style={styles.goalCardTitle}>{g.kpi.title}</div>
+                        <div style={styles.goalCardMeta}>
+                          목표 {g.kpi.targetValue}{g.kpi.unit}
+                          {g.currentValue !== null && g.currentValue !== undefined &&
+                            ` · 현재 ${g.currentValue}${g.kpi.unit}`}
+                        </div>
+                      </div>
+                      {selectedGoalId === g.id && (
+                        <div style={{ ...styles.checkMark, color: selectedSituationType.color }}>✓</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 담당자 선택 */}
             <div style={styles.fieldGroup}>
               <div style={styles.fieldLabel}>면담할 구성원을 선택해주세요 <span style={styles.required}>*</span></div>
@@ -488,39 +521,6 @@ export default function Screen5_Coaching({ onBack }) {
                 </div>
               </div>
             </div>
-
-            {/* KPI 선택 (선택사항) */}
-            {goals.length > 0 && (
-              <div style={styles.fieldGroup}>
-                <div style={styles.fieldLabel}>관련 KPI 선택 <span style={styles.optional}>(선택사항)</span></div>
-                <div style={styles.goalCards}>
-                  {goals.map((g, i) => (
-                    <button
-                      key={g.id}
-                      style={{
-                        ...styles.goalCard,
-                        borderColor: selectedGoalId === g.id ? selectedSituationType.color : '#e2e8f0',
-                        background: selectedGoalId === g.id ? selectedSituationType.bgColor : 'white',
-                      }}
-                      onClick={() => setSelectedGoalId(selectedGoalId === g.id ? '' : g.id)}
-                    >
-                      <div style={styles.goalCardNum}>{i + 1}</div>
-                      <div style={styles.goalCardContent}>
-                        <div style={styles.goalCardTitle}>{g.kpi.title}</div>
-                        <div style={styles.goalCardMeta}>
-                          목표 {g.kpi.targetValue}{g.kpi.unit}
-                          {g.currentValue !== null && g.currentValue !== undefined &&
-                            ` · 현재 ${g.currentValue}${g.kpi.unit}`}
-                        </div>
-                      </div>
-                      {selectedGoalId === g.id && (
-                        <div style={{ ...styles.checkMark, color: selectedSituationType.color }}>✓</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* 구체적 상황 입력 */}
             <div style={styles.fieldGroup}>
